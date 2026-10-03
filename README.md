@@ -2,28 +2,28 @@
 
 Applicazione web interattiva realizzata in **Python** e **Streamlit** che agisce da **Dashboard Master di Analisi Finanziaria**.
 
-L'applicazione calcola **nativamente** le metriche quantitative e volumetriche estratte dai Colab specialistici (inclusa la previsione probabilistica quantilica multi-giorno TimesFM-3) o, in alternativa, supporta l'ingestion tramite caricamento di file CSV o lettura da cartella locale. Utilizza inoltre l'API di **Gemini 2.5 Flash** (`gemini-2.5-flash`) per generare analisi qualitative sul sentiment delle notizie e un verdetto finanziario integrato.
+L'applicazione calcola **nativamente** le metriche quantitative e volumetriche estratte dai Colab specialistici (inclusa la previsione probabilistica quantilica multi-giorno TimesFM-3). Utilizza inoltre l'API di **Gemini 2.5 Flash** (`gemini-2.5-flash`) per generare analisi qualitative sul sentiment delle notizie e un verdetto finanziario integrato.
 
 ---
 
 ## 🌟 Funzionalità Principali
 
-1. **Calcolo Nativo (Motore Python):**
-   - **Analisi Quantitativa (TimesFM-3 / Proiezioni Quantiliche):** Calcola Ticker, Ultimo Prezzo, Trend (`BUY`/`SELL`/`EQUILIBRIO`), Volatilità Annualizzata (`Sigma %`), e le proiezioni probabilistiche multi-giorno (`Data previsione`, `P10`, `Mediana`, `P90`, `Rend. mediano %`, `Incertezza (sigma) %`).
-   - **Analisi Microstruttura dei Volumi (1m Intraday):** Scarica i dati ad 1 minuto e stima il Delta Volumi Intra (`Buy - Sell %`) usando i metodi *CLV*, *Candela* o *Tick*, e calcola la `% Trader in Perdita` tramite il Volume Profile.
-2. **Ingestion Flessibile dei Dati:**
-   - **Calcolo Nativo:** Genera automaticamente tutte le metriche per i ticker desiderati.
-   - **Caricamento File CSV:** Permette di caricare separatamente l'output del Colab 1 (TimesFM-3) e del Colab 2 (Volumi).
-   - **Lettura da Cartella Locale:** Legge automaticamente i CSV salvati nella cartella `./data/`.
-3. **Arricchimento tramite Gemini API (`gemini-2.5-flash`):**
-   - Interroga il modello Gemini di Google per generare le colonne qualitative:
-     - **Sentiment News:** Sintesi del sentiment e contesto di mercato.
-     - **Sintesi / Verdetto:** Giudizio finale integrato tra modello predittivo, volumi intraday e sentiment.
-4. **Visualizzazione e Download:**
-   - Tabella pulita con intestazioni complete:
-     `Ticker` | `Ultimo Prezzo` | `Trend TimesFM` | `Sigma %` | `Data previsione` | `P10` | `Mediana` | `P90` | `Rend. mediano %` | `Incertezza (sigma) %` | `Delta Volumi Intra` | `% Trader in Perdita` | `Sentiment News` | `Sintesi / Verdetto`
-   - Pulsante per scaricare il report completo in CSV (`report_finale_integrato.csv`).
-   - Grafici interattivi e comparativi dei volumi e dei trend.
+Il calcolo nativo **replica passo per passo i due Colab** (verificato numericamente contro il codice dei notebook):
+
+1. **Previsione (Colab `NASDAQ_TimesFM3`) — `quant_engine.py`**
+   - Universo: i top N titoli NASDAQ per market cap (screener Nasdaq, fallback Wikipedia Nasdaq-100), doppie classi eliminate; oppure lista manuale.
+   - Prezzi aggiustati 5y su calendario comune (titoli con storico <99% scartati, buchi isolati riempiti).
+   - **TimesFM-3 sui rendimenti log** (contesto 1024 gg): decili → mediana, P10, P90; sigma per passo `(P90−P10)/(2·Z80)`, cumulata come radice della somma dei quadrati; `P10/Mediana/P90 = ultimo · exp(μ ∓ Z80·σ)`.
+   - Output: `Ultimo Prezzo`, `Data previsione`, `P10`, `Mediana`, `P90`, `Rend. mediano %`, `Incertezza (sigma) %`, ordinati per rendimento mediano (come il Colab). Colonne aggiuntive della dashboard: `Trend TimesFM` (BUY/SELL/EQUILIBRIO se |μ| > soglia·σ, soglia regolabile) e `Sigma %` (volatilità annualizzata).
+   - **Senza `timesfm3` installato** l'app usa la baseline *Naive (0%)* del Colab e lo segnala (colonna `Modello` + avviso): niente trend inventati.
+2. **Volumi al minuto (Colab `analisi_volumi_buy_sell`) — `volume_engine.py`**
+   - Dati a 1 minuto (~8 giorni), 1-5 giorni, `DATA_FINE`, orari regolari, metodi `candela` / `clv` / `tick`, soglia di equilibrio.
+   - Volume Profile su prezzo tipico (H+L+C)/3: `% in perdita/guadagno`, POC, VWAP, area di valore (VAL/VAH), zone più affollate sopra/sotto, top 5 zone, dettaglio per giorno, conclusioni (soglie 60% / 40% come nel Colab).
+3. **Dati**: la dashboard calcola tutto nativamente (nessun caricamento di CSV né lettura da cartella).
+4. **Arricchimento (Gemini 2.5 Flash o euristica locale)**: `Sentiment News` e `Sintesi / Verdetto`, con le stesse soglie dei Colab. I dati mancanti sono "n/d", mai riempiti con valori fittizi. Nota: Gemini non ha accesso alle notizie in tempo reale.
+5. **Report**: tabella integrata (join *outer* su `Ticker`), download `report_finale_integrato.csv`, grafici comparativi e, per il calcolo nativo, il dettaglio per ticker (Volume Profile, tabelle).
+
+> ⚠️ Come nei Colab: buy/sell è una **stima** dalle candele (non vero order flow); "in perdita/guadagno" considera solo i volumi del periodo; l'universo "top N di oggi" ha survivorship bias. Non è un consiglio di investimento.
 
 ---
 
@@ -37,7 +37,8 @@ L'applicazione calcola **nativamente** le metriche quantitative e volumetriche e
 Clona o scarica la repository, quindi installa i pacchetti richiesti:
 
 ```bash
-pip install -r requirements.txt
+pip install -r requirements.txt            # senza TimesFM-3 (baseline Naive)
+pip install -r requirements-timesfm.txt    # opzionale: TimesFM-3 reale, come il Colab
 ```
 
 ### 3. Avvio dell'Applicazione
@@ -85,10 +86,7 @@ L'applicazione si aprirà automaticamente nel browser all'indirizzo `http://loca
 
 1. **Inserisci la Chiave API Gemini (opzionale):**
    - Nella barra laterale (*Sidebar*), inserisci la tua API Key per utilizzare il modello `gemini-2.5-flash`. Se lasciata vuota, l'app genererà un'analisi euristica integrata di fallback.
-2. **Scegli la Modalità di Funzionamento:**
-   - **Calcolo Nativo (Consigliato):** Inserisci i ticker separati da virgola (es. `MSTR, AAPL, NVDA, TSLA, MSFT`), seleziona il metodo di stima dei volumi (*CLV*, *Candela*, *Tick*) e premi **"Esegui Analisi Nativa"**.
-   - **Carica File CSV:** Trascina i due file CSV generati dai Colab.
-   - **Leggi da Cartella Locale:** Legge i file `colab1_timesfm.csv` e `colab2_volumi.csv` posizionati nella cartella `./data/`.
+2. **Imposta i parametri** nella barra laterale: ticker (lista manuale o top N Nasdaq), orizzonte, metodo buy/sell, giorni, ecc., poi premi **«Esegui Analisi Nativa»**.
 3. **Esporta il Report:**
    - Clicca sul pulsante **"Scarica report_finale_integrato.csv"** per esportare i dati integrati.
 
@@ -96,7 +94,7 @@ L'applicazione si aprirà automaticamente nel browser all'indirizzo `http://loca
 
 ## 🧪 Esecuzione dei Test Unitari
 
-Per verificare il corretto funzionamento di tutti i moduli (motore quantitativo, motore volumi, arricchimento AI e join dati):
+I test sono offline (dati sintetici e forecaster simulato, nessun accesso a Yahoo/Nasdaq) e verificano le formule dei Colab:
 
 ```bash
 pytest test_modules.py
@@ -109,13 +107,13 @@ pytest test_modules.py
 ```
 .
 ├── app.py                   # Dashboard principale Streamlit
-├── quant_engine.py          # Motore di analisi quantitativa (TimesFM / Trend / Sigma % / Quantili)
-├── volume_engine.py         # Motore microstruttura volumi intraday e Volume Profile
+├── quant_engine.py          # Pipeline Colab TimesFM-3 (universo, prezzi, rendimenti log, quantili)
+├── volume_engine.py         # Pipeline Colab volumi (buy/sell, Volume Profile, area di valore)
 ├── gemini_enrichment.py     # Integrazione API Gemini 2.5 Flash
 ├── test_modules.py          # Suite di test unitari
 ├── requirements.txt         # Dipendenze Python
+├── requirements-timesfm.txt # Dipendenze opzionali per TimesFM-3
 ├── Dockerfile               # Configurazione per la creazione dell'immagine Docker
 ├── docker-compose.yml       # Configurazione Docker Compose
-├── data/                    # Cartella contenente i CSV locali di esempio
 └── README.md                # Guida all'uso del progetto
 ```
