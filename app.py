@@ -145,12 +145,12 @@ renamed = merged.rename(columns={
     "Ultimo_Prezzo": "Ultimo Prezzo", "Trend_TimesFM": "Trend TimesFM", "Sigma_%": "Sigma %",
     "Delta_Volumi_Intra": "Delta Volumi Intra", "%_Trader_In_Perdita": "% Trader in Perdita",
     "Data_Previsione": "Data previsione", "Rend_Mediano_%": "Rend. mediano %",
-    "Incertezza_Sigma_%": "Incertezza (sigma) %", "Market_Cap_mld": "Market cap (mld $)",
+    "Incertezza_Sigma_%": "Incertezza (sigma) %",
     "Verdetto_Volumi": "Verdetto Volumi", "Maggioranza_Acquirenti": "Maggioranza acquirenti",
     "Posizione_Area_Valore": "Posizione vs area valore",
 })
 
-colonne = ["Ticker", "Market cap (mld $)", "Ultimo Prezzo", "Trend TimesFM", "Sigma %", "Data previsione",
+colonne = ["Ticker", "Ultimo Prezzo", "Trend TimesFM", "Sigma %", "Data previsione",
            "P10", "Mediana", "P90", "Rend. mediano %", "Incertezza (sigma) %",
            "Delta Volumi Intra", "Verdetto Volumi", "% Trader in Perdita", "Maggioranza acquirenti",
            "Posizione vs area valore", "POC", "VWAP", "VAL", "VAH",

@@ -195,7 +195,6 @@ def tabella_previsioni(prices: pd.DataFrame, horizon: int = HORIZON, forecaster=
         mc = mc_map.get(t, np.nan)
         rows.append({
             "Ticker": t,
-            "Market_Cap_mld": None if pd.isna(mc) else round(mc / 1e9, 1),
             "Ultimo_Prezzo": round(last, 2),
             "Trend_TimesFM": _trend_da_previsione(mu, sg, soglia_trend),
             "Sigma_%": round(sigma_ann, 2),
