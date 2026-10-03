@@ -27,7 +27,7 @@ L'applicazione calcola **nativamente** le metriche quantitative e volumetriche e
 
 ---
 
-## 🚀 Requisiti e Installazione
+## 🚀 Requisiti e InstallazioneLocale (Senza Docker)
 
 ### 1. Prerequisiti
 - **Python 3.10+** installato sul sistema.
@@ -37,20 +37,47 @@ L'applicazione calcola **nativamente** le metriche quantitative e volumetriche e
 Clona o scarica la repository, quindi installa i pacchetti richiesti:
 
 ```bash
-pip install streamlit pandas numpy yfinance matplotlib google-genai pytest
+pip install -r requirements.txt
 ```
 
----
-
-## 💻 Come Avviare l'Applicazione
-
-Per lanciare la dashboard Streamlit:
+### 3. Avvio dell'Applicazione
+Per lanciare la dashboard Streamlit localmente:
 
 ```bash
 streamlit run app.py
 ```
 
 L'applicazione si aprirà automaticamente nel browser all'indirizzo `http://localhost:8501`.
+
+---
+
+## 🐳 Avvio tramite Docker
+
+È possibile avviare l'applicazione in modo isolato ed automatizzato utilizzando **Docker** o **Docker Compose**.
+
+### Opzione A: Con Docker Compose (Consigliato)
+
+1. Avvia il container:
+   ```bash
+   docker compose up --build
+   ```
+2. Apri il browser all'indirizzo: `http://localhost:8501`
+3. Per fermare il container:
+   ```bash
+   docker compose down
+   ```
+
+### Opzione B: Con Docker CLI
+
+1. Costruisci l'immagine Docker:
+   ```bash
+   docker build -t financial-dashboard .
+   ```
+2. Esegui il container:
+   ```bash
+   docker run -d -p 8501:8501 --name financial_dashboard financial-dashboard
+   ```
+3. Apri il browser all'indirizzo: `http://localhost:8501`
 
 ---
 
@@ -86,6 +113,9 @@ pytest test_modules.py
 ├── volume_engine.py         # Motore microstruttura volumi intraday e Volume Profile
 ├── gemini_enrichment.py     # Integrazione API Gemini 2.5 Flash
 ├── test_modules.py          # Suite di test unitari
+├── requirements.txt         # Dipendenze Python
+├── Dockerfile               # Configurazione per la creazione dell'immagine Docker
+├── docker-compose.yml       # Configurazione Docker Compose
 ├── data/                    # Cartella contenente i CSV locali di esempio
 └── README.md                # Guida all'uso del progetto
 ```
