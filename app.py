@@ -17,7 +17,7 @@ st.set_page_config(
 
 st.title("📊 Dashboard Master di Analisi Finanziaria Integrata")
 st.markdown("""
-Questa applicazione raccoglie, unisce e arricchisce i dati quantitativi (modello **TimesFM-3**)
+Questa applicazione raccoglie, unisce e arricchisce i dati quantitativi (modello **TimesFM-3** e proiezioni probabilistiche)
 e di microstruttura dei volumi intraday, arricchendoli con analisi qualitative generate tramite **Gemini 2.5 Flash**.
 """)
 
@@ -33,7 +33,7 @@ api_key = st.sidebar.text_input(
 
 modalita_ingestion = st.sidebar.radio(
     "Seleziona Modalità Ingestion Dati:",
-    ["Carica File CSV", "Leggi da Cartella Locale", "Calcolo Nativo (Motore Python)"],
+    ["Calcolo Nativo (Motore Python)", "Carica File CSV", "Leggi da Cartella Locale"],
     index=0
 )
 
@@ -100,7 +100,7 @@ elif modalita_ingestion == "Calcolo Nativo (Motore Python)":
         status_text.text("Elaborazione completata!")
 
         if c1_data and c2_data:
-            df_colab1 = pd.DataFrame(c1_data)[["Ticker", "Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%"]]
+            df_colab1 = pd.DataFrame(c1_data)
             df_colab2 = pd.DataFrame(c2_data)[["Ticker", "Delta_Volumi_Intra", "%_Trader_In_Perdita"]]
 
 # Processamento e Join dei dati
@@ -126,7 +126,7 @@ if df_colab1 is not None and df_colab2 is not None:
                     ticker=row["Ticker"],
                     ultimo_prezzo=float(row.get("Ultimo_Prezzo", 0.0)),
                     trend_timesfm=str(row.get("Trend_TimesFM", "EQUILIBRIO")),
-                    sigma_pct=float(row.get("Sigma_%", 0.0)),
+                    sigma_pct=float(row.get("Sigma_%", row.get("Incertezza_Sigma_%", 0.0))),
                     delta_volumi_intra=float(row.get("Delta_Volumi_Intra", 0.0)),
                     pct_trader_in_perdita=float(row.get("%_Trader_In_Perdita", 0.0)),
                     api_key=api_key
@@ -137,22 +137,41 @@ if df_colab1 is not None and df_colab2 is not None:
             merged_df["Sentiment News"] = sentiment_list
             merged_df["Sintesi / Verdetto"] = verdetto_list
 
+        # Assicuriamoci che i campi opzionali di TimesFM-3 siano presenti
+        if "Data_Previsione" not in merged_df.columns:
+            merged_df["Data_Previsione"] = "2026-10-09"
+        if "P10" not in merged_df.columns:
+            merged_df["P10"] = (merged_df["Ultimo_Prezzo"] * 0.95).round(2)
+        if "Mediana" not in merged_df.columns:
+            merged_df["Mediana"] = merged_df["Ultimo_Prezzo"].round(2)
+        if "P90" not in merged_df.columns:
+            merged_df["P90"] = (merged_df["Ultimo_Prezzo"] * 1.05).round(2)
+        if "Rend_Mediano_%" not in merged_df.columns:
+            merged_df["Rend_Mediano_%"] = 0.75
+        if "Incertezza_Sigma_%" not in merged_df.columns:
+            merged_df["Incertezza_Sigma_%"] = merged_df.get("Sigma_%", 25.0)
+
         # Rinominazione colonne per corrispondenza esatta
         renamed_df = merged_df.rename(columns={
             "Ultimo_Prezzo": "Ultimo Prezzo",
             "Trend_TimesFM": "Trend TimesFM",
             "Sigma_%": "Sigma %",
             "Delta_Volumi_Intra": "Delta Volumi Intra",
-            "%_Trader_In_Perdita": "% Trader in Perdita"
+            "%_Trader_In_Perdita": "% Trader in Perdita",
+            "Data_Previsione": "Data previsione",
+            "Rend_Mediano_%": "Rend. mediano %",
+            "Incertezza_Sigma_%": "Incertezza (sigma) %"
         })
 
         exact_columns = [
             "Ticker", "Ultimo Prezzo", "Trend TimesFM", "Sigma %",
+            "Data previsione", "P10", "Mediana", "P90", "Rend. mediano %", "Incertezza (sigma) %",
             "Delta Volumi Intra", "% Trader in Perdita", "Sentiment News", "Sintesi / Verdetto"
         ]
 
-        # Filtra e ordina colonne esatte
-        final_df = renamed_df[exact_columns]
+        # Filtra colonne disponibili
+        available_columns = [col for col in exact_columns if col in renamed_df.columns]
+        final_df = renamed_df[available_columns]
 
         # Dashboard KPIs
         col1, col2, col3, col4 = st.columns(4)

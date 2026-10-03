@@ -20,6 +20,21 @@ def test_colab_data_merge():
     assert not merged.empty
     assert "Ultimo_Prezzo" in merged.columns
     assert "Delta_Volumi_Intra" in merged.columns
+    assert "Data_Previsione" in merged.columns
+    assert "P10" in merged.columns
+    assert "Mediana" in merged.columns
+    assert "P90" in merged.columns
+
+def test_quant_engine_forecast():
+    res = calcola_quant_trend_ticker("AAPL", period="1mo")
+    assert res["Ticker"] == "AAPL"
+    assert "Ultimo_Prezzo" in res
+    assert "Trend_TimesFM" in res
+    assert "Data_Previsione" in res
+    assert "P10" in res
+    assert "Mediana" in res
+    assert "P90" in res
+    assert "Rend_Mediano_%" in res
 
 def test_stima_buy_sell():
     data = {
