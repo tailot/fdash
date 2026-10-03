@@ -1,200 +1,308 @@
 import os
+import numpy as np
 import pandas as pd
 import streamlit as st
 import matplotlib.pyplot as plt
-import numpy as np
 
 from volume_engine import calcola_microstruttura_ticker
-from quant_engine import calcola_quant_trend_ticker
-from gemini_enrichment import genera_analisi_gemini
+from quant_engine import calcola_previsioni, carica_timesfm3, HORIZON, SOGLIA_TREND, MODELLO_FALLBACK
+from heuristic_enrichment import genera_analisi_euristica
+from backtesting import walk_forward_backtest, compute_strategy_metrics
+from i18n import t, LANGUAGES
 
-# Configurazione pagina Streamlit
-st.set_page_config(
-    page_title="Dashboard Master di Analisi Finanziaria",
-    page_icon="📈",
-    layout="wide"
-)
+# Page config
+st.set_page_config(page_title="Master Financial Analysis Dashboard", page_icon="📈", layout="wide")
 
-st.title("📊 Dashboard Master di Analisi Finanziaria Integrata")
-st.markdown("""
-Questa applicazione raccoglie, unisce e arricchisce i dati quantitativi (modello **TimesFM-3**)
-e di microstruttura dei volumi intraday, arricchendoli con analisi qualitative generate tramite **Gemini 2.5 Flash**.
-""")
+# Sidebar - Language Selection
+st.sidebar.header("⚙️ Options")
+lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAGES.keys()),
+                                format_func=lambda x: LANGUAGES[x], index=0)
 
-# Sidebar - Impostazioni e Ingestion Dati
-st.sidebar.header("⚙️ Opzioni & Ingestion Dati")
+# Localized page titles
+st.title(t("app_title", lang_code))
+st.markdown(t("app_subtitle", lang_code))
 
-api_key = st.sidebar.text_input(
-    "Chiave API Gemini (gemini-2.5-flash):",
-    type="password",
-    value=os.environ.get("GEMINI_API_KEY", ""),
-    help="Inserisci la tua chiave API Google Gemini per abilitare l'arricchimento AI."
-)
 
-modalita_ingestion = st.sidebar.radio(
-    "Seleziona Modalità Ingestion Dati:",
-    ["Carica File CSV", "Leggi da Cartella Locale", "Calcolo Nativo (Motore Python)"],
-    index=0
-)
+@st.cache_resource(show_spinner=False)
+def get_forecaster():
+    return carica_timesfm3()
 
-df_colab1 = None
-df_colab2 = None
 
-if modalita_ingestion == "Carica File CSV":
-    st.sidebar.subheader("Carica i file CSV")
-    file1 = st.sidebar.file_uploader("Output Colab 1 (TimesFM-3)", type=["csv"], key="file1")
-    file2 = st.sidebar.file_uploader("Output Colab 2 (Volumi)", type=["csv"], key="file2")
+# ---------------------------------------------------------------------------------------------- sidebar
+st.sidebar.subheader(t("universe_header", lang_code))
+universo_label = st.sidebar.radio(t("universe_radio", lang_code),
+                                  [t("manual_list", lang_code), t("top_nasdaq", lang_code)], index=0)
+is_manual = (universo_label == t("manual_list", lang_code))
 
-    if file1 and file2:
-        try:
-            df_colab1 = pd.read_csv(file1)
-            df_colab2 = pd.read_csv(file2)
-        except Exception as e:
-            st.error(f"Errore nella lettura dei file caricati: {e}")
-
-elif modalita_ingestion == "Leggi da Cartella Locale":
-    st.sidebar.subheader("Cartella Locale: data/")
-    path_c1 = os.path.join("data", "colab1_timesfm.csv")
-    path_c2 = os.path.join("data", "colab2_volumi.csv")
-
-    if os.path.exists(path_c1) and os.path.exists(path_c2):
-        try:
-            df_colab1 = pd.read_csv(path_c1)
-            df_colab2 = pd.read_csv(path_c2)
-            st.sidebar.success("File trovati e caricati da 'data/'!")
-        except Exception as e:
-            st.sidebar.error(f"Errore durante il caricamento da data/: {e}")
-    else:
-        st.sidebar.warning("File CSV non trovati nella cartella 'data/'.")
-
-elif modalita_ingestion == "Calcolo Nativo (Motore Python)":
-    st.sidebar.subheader("Calcolo Nativo")
-    input_tickers = st.sidebar.text_input("Ticker (separati da virgola):", "MSTR, AAPL, NVDA, TSLA, MSFT")
-    metodo_volumi = st.sidebar.selectbox("Metodo Stima Buy/Sell Volumi:", ["clv", "candela", "tick"], index=0)
-    giorni_intra = st.sidebar.slider("Giorni Intraday Analizzati:", min_value=1, max_value=5, value=1)
-
-    if st.sidebar.button("Esegui Analisi Nativa"):
-        tickers_list = [t.strip().upper() for t in input_tickers.split(",") if t.strip()]
-
-        c1_data = []
-        c2_data = []
-
-        progress_bar = st.progress(0)
-        status_text = st.empty()
-
-        for idx, t in enumerate(tickers_list):
-            status_text.text(f"Elaborazione in corso per {t}...")
-            try:
-                # Calcolo Quant
-                q_res = calcola_quant_trend_ticker(t)
-                c1_data.append(q_res)
-
-                # Calcolo Volumi Microstruttura
-                v_res = calcola_microstruttura_ticker(t, giorni=giorni_intra, metodo=metodo_volumi)
-                c2_data.append(v_res)
-            except Exception as e:
-                st.warning(f"Impossibile elaborare il ticker {t}: {e}")
-
-            progress_bar.progress((idx + 1) / len(tickers_list))
-
-        status_text.text("Elaborazione completata!")
-
-        if c1_data and c2_data:
-            df_colab1 = pd.DataFrame(c1_data)[["Ticker", "Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%"]]
-            df_colab2 = pd.DataFrame(c2_data)[["Ticker", "Delta_Volumi_Intra", "%_Trader_In_Perdita"]]
-
-# Processamento e Join dei dati
-if df_colab1 is not None and df_colab2 is not None:
-    # Normalizzazione nomi colonna Ticker
-    df_colab1["Ticker"] = df_colab1["Ticker"].astype(str).str.strip().str.upper()
-    df_colab2["Ticker"] = df_colab2["Ticker"].astype(str).str.strip().str.upper()
-
-    # Structural Join basato su Ticker
-    merged_df = pd.merge(df_colab1, df_colab2, on="Ticker", how="inner")
-
-    if merged_df.empty:
-        st.error("Nessuna corrispondenza trovata tra i ticker nei due dataset.")
-    else:
-        st.subheader("1. Arricchimento tramite Gemini API (gemini-2.5-flash)")
-
-        with st.spinner("Generazione sentiment e sintesi/verdetto tramite Gemini..."):
-            sentiment_list = []
-            verdetto_list = []
-
-            for _, row in merged_df.iterrows():
-                enrichment = genera_analisi_gemini(
-                    ticker=row["Ticker"],
-                    ultimo_prezzo=float(row.get("Ultimo_Prezzo", 0.0)),
-                    trend_timesfm=str(row.get("Trend_TimesFM", "EQUILIBRIO")),
-                    sigma_pct=float(row.get("Sigma_%", 0.0)),
-                    delta_volumi_intra=float(row.get("Delta_Volumi_Intra", 0.0)),
-                    pct_trader_in_perdita=float(row.get("%_Trader_In_Perdita", 0.0)),
-                    api_key=api_key
-                )
-                sentiment_list.append(enrichment["Sentiment News"])
-                verdetto_list.append(enrichment["Sintesi / Verdetto"])
-
-            merged_df["Sentiment News"] = sentiment_list
-            merged_df["Sintesi / Verdetto"] = verdetto_list
-
-        # Rinominazione colonne per corrispondenza esatta
-        renamed_df = merged_df.rename(columns={
-            "Ultimo_Prezzo": "Ultimo Prezzo",
-            "Trend_TimesFM": "Trend TimesFM",
-            "Sigma_%": "Sigma %",
-            "Delta_Volumi_Intra": "Delta Volumi Intra",
-            "%_Trader_In_Perdita": "% Trader in Perdita"
-        })
-
-        exact_columns = [
-            "Ticker", "Ultimo Prezzo", "Trend TimesFM", "Sigma %",
-            "Delta Volumi Intra", "% Trader in Perdita", "Sentiment News", "Sintesi / Verdetto"
-        ]
-
-        # Filtra e ordina colonne esatte
-        final_df = renamed_df[exact_columns]
-
-        # Dashboard KPIs
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Totale Ticker Analizzati", len(final_df))
-        col2.metric("Trend Positivi (BUY)", (final_df["Trend TimesFM"] == "BUY").sum())
-        col3.metric("Delta Volumi Medio %", f"{final_df['Delta Volumi Intra'].mean():.2f}%")
-        col4.metric("% Media Trader in Perdita", f"{final_df['% Trader in Perdita'].mean():.2f}%")
-
-        st.subheader("2. Tabella Report Finale Integrato")
-        st.dataframe(final_df, use_container_width=True)
-
-        # Export CSV
-        csv_data = final_df.to_csv(index=False).encode('utf-8')
-        st.download_button(
-            label="📥 Scarica report_finale_integrato.csv",
-            data=csv_data,
-            file_name="report_finale_integrato.csv",
-            mime="text/csv",
-            type="primary"
-        )
-
-        st.subheader("3. Visualizzazione Grafica comparativa")
-        g1, g2 = st.columns(2)
-
-        with g1:
-            st.markdown("#### Delta Volumi Intraday % per Ticker")
-            fig1, ax1 = plt.subplots(figsize=(6, 4))
-            colors1 = ["#2e9e5b" if v >= 0 else "#d6453d" for v in final_df["Delta Volumi Intra"]]
-            ax1.bar(final_df["Ticker"], final_df["Delta Volumi Intra"], color=colors1)
-            ax1.axhline(0, color="gray", linestyle="--", linewidth=0.8)
-            ax1.set_ylabel("Delta Volumi %")
-            st.pyplot(fig1)
-
-        with g2:
-            st.markdown("#### % Trader in Perdita per Ticker")
-            fig2, ax2 = plt.subplots(figsize=(6, 4))
-            colors2 = ["#d6453d" if v >= 50 else "#2e9e5b" for v in final_df["% Trader in Perdita"]]
-            ax2.bar(final_df["Ticker"], final_df["% Trader in Perdita"], color=colors2)
-            ax2.axhline(50, color="orange", linestyle=":", label="Soglia 50%")
-            ax2.set_ylabel("% Trader in Perdita")
-            ax2.legend()
-            st.pyplot(fig2)
-
+if is_manual:
+    input_tickers = st.sidebar.text_input(t("tickers_input", lang_code), "MSTR, AAPL, NVDA, TSLA, MSFT")
+    n_top = 100
 else:
-    st.info("👈 Seleziona una modalità di ingestion dalla barra laterale per iniziare l'analisi.")
+    input_tickers = ""
+    n_top = st.sidebar.slider(t("n_stocks_slider", lang_code), 20, 100, 100, step=10)
+
+st.sidebar.subheader(t("forecast_header", lang_code))
+horizon = st.sidebar.slider(t("horizon_slider", lang_code), 1, 20, HORIZON)
+soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
+                                        help=t("trend_threshold_help", lang_code))
+usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=True)
+
+st.sidebar.subheader(t("volume_header", lang_code))
+metodo = st.sidebar.selectbox(t("buy_sell_method", lang_code), ["clv", "candela", "tick"], index=0)
+giorni_intra = st.sidebar.slider(t("analyzed_days", lang_code), 1, 5, 1)
+data_fine = st.sidebar.text_input(t("end_date_input", lang_code), "")
+solo_regolari = st.sidebar.checkbox(t("regular_hours_only", lang_code), value=True)
+soglia_eq = st.sidebar.number_input(t("eq_threshold_label", lang_code), 0.0, 20.0, 2.0, 0.5)
+n_bin = st.sidebar.slider(t("n_bins_slider", lang_code), 10, 100, 30, step=5)
+area_valore = st.sidebar.slider(t("value_area_slider", lang_code), 50, 90, 70, step=5)
+prezzo_rif = st.sidebar.number_input(t("ref_price_label", lang_code), 0.0, value=0.0)
+
+if st.sidebar.button(t("run_analysis_button", lang_code), type="primary"):
+    manuali = [t_item.strip().upper() for t_item in input_tickers.split(",") if t_item.strip()] or None
+    forecaster = get_forecaster() if usa_tfm else None
+    with st.spinner(t("download_prices_spinner", lang_code)):
+        try:
+            dfq, info = calcola_previsioni(manuali, n_tickers=n_top, horizon=horizon,
+                                            forecaster=forecaster, soglia_trend=soglia_trend)
+        except Exception as e:
+            st.error(t("forecast_failed", lang_code).format(e))
+            st.stop()
+
+    righe_vol, errori = [], []
+    barra = st.progress(0.0)
+    stato = st.empty()
+    for i, t_sym in enumerate(dfq["Ticker"]):
+        stato.text(t("min_volume_status", lang_code).format(t_sym, i + 1, len(dfq)))
+        try:
+            r = calcola_microstruttura_ticker(t_sym, giorni=giorni_intra, data_fine=data_fine, metodo=metodo,
+                                              solo_orari_regolari=solo_regolari, soglia_equilibrio=soglia_eq,
+                                              n_bin=n_bin, prezzo_riferimento=prezzo_rif,
+                                              area_valore_pct=area_valore)
+            righe_vol.append(r)
+        except Exception as e:
+            errori.append(f"{t_sym}: {e}")
+        barra.progress((i + 1) / len(dfq))
+    stato.empty()
+    st.session_state["nativo"] = {"quant": dfq, "info": info, "vol": righe_vol, "errori": errori,
+                                  "metodo": metodo}
+
+nat = st.session_state.get("nativo")
+
+# ---------------------------------------------------------------------------------------------- report
+if not nat:
+    st.info(t("sidebar_prompt", lang_code))
+    st.stop()
+
+df_quant = nat["quant"]
+df_vol = pd.DataFrame([{k: v for k, v in r.items()
+                        if not isinstance(v, (pd.DataFrame, dict)) and k != "zone_top5"}
+                       for r in nat["vol"]]) if nat["vol"] else pd.DataFrame(
+                            columns=["Ticker", "Delta_Volumi_Intra", "%_Trader_In_Perdita"])
+
+info = nat["info"]
+modello = df_quant["Modello"].iloc[0] if "Modello" in df_quant else ""
+st.caption(f"{t('universe_header', lang_code)}: {info['fonte']} · {len(df_quant)} stocks · {info['giorni']} days "
+           f"({info['dal']} → {info['al']}) · run {info['run_ts']} · model: {modello}")
+if modello == MODELLO_FALLBACK:
+    st.warning(t("fallback_warning", lang_code))
+if info["scartati"]:
+    st.caption(t("discarded_caption", lang_code).format(", ".join(info["scartati"][:40])))
+for e in nat["errori"]:
+    st.warning(t("volumes_not_available", lang_code).format(e))
+
+# outer join: a ticker without volume data stays in the report with missing values
+merged = pd.merge(df_quant, df_vol, on="Ticker", how="outer", suffixes=("", "_vol"))
+if "Ultimo_Prezzo_vol" in merged.columns:
+    merged["Ultimo_Prezzo"] = merged["Ultimo_Prezzo"].fillna(merged["Ultimo_Prezzo_vol"])
+if merged.empty:
+    st.error(t("outer_join_no_data", lang_code))
+    st.stop()
+
+for col in ["Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%", "Data_Previsione", "P10", "Mediana", "P90",
+            "Rend_Mediano_%", "Incertezza_Sigma_%", "Delta_Volumi_Intra", "%_Trader_In_Perdita"]:
+    if col not in merged.columns:
+        merged[col] = np.nan
+
+st.subheader(t("enrichment_subheader", lang_code))
+
+
+@st.cache_data(show_spinner=False)
+def _arricchisci(righe: tuple, l_code: str):
+    out = []
+    for r in righe:
+        out.append(genera_analisi_euristica(*r[:6], rend_mediano_pct=r[6], incertezza_pct=r[7], lang=l_code))
+    return out
+
+
+chiavi = ["Ticker", "Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%", "Delta_Volumi_Intra", "%_Trader_In_Perdita",
+          "Rend_Mediano_%", "Incertezza_Sigma_%"]
+righe_in = tuple(tuple(None if (isinstance(v, float) and np.isnan(v)) else v for v in row)
+                 for row in merged[chiavi].itertuples(index=False, name=None))
+with st.spinner(t("enrichment_spinner", lang_code)):
+    arr = _arricchisci(righe_in, lang_code)
+merged["Sentiment News"] = [a["Sentiment News"] for a in arr]
+merged["Sintesi / Verdetto"] = [a["Sintesi / Verdetto"] for a in arr]
+
+# Map terminology according to selected language
+buyer_maj_map = {
+    "PERDITA": t("loss", lang_code),
+    "GUADAGNO": t("profit", lang_code),
+    "MISTA": t("mixed", lang_code)
+}
+pos_va_map = {
+    "SOPRA": t("above", lang_code),
+    "SOTTO": t("below", lang_code),
+    "DENTRO": t("inside", lang_code)
+}
+if "Maggioranza_Acquirenti" in merged.columns:
+    merged["Maggioranza_Acquirenti"] = merged["Maggioranza_Acquirenti"].map(lambda x: buyer_maj_map.get(x, x))
+if "Posizione_Area_Valore" in merged.columns:
+    merged["Posizione_Area_Valore"] = merged["Posizione_Area_Valore"].map(lambda x: pos_va_map.get(x, x))
+if "Verdetto_Volumi" in merged.columns:
+    merged["Verdetto_Volumi"] = merged["Verdetto_Volumi"].map(
+        lambda x: t("buy", lang_code) if x == "BUY" else (t("sell", lang_code) if x == "SELL" else (t("equilibrium", lang_code) if x == "EQUILIBRIO" else x))
+    )
+
+renamed = merged.rename(columns={
+    "Ultimo_Prezzo": t("col_last_price", lang_code),
+    "Trend_TimesFM": t("col_trend", lang_code),
+    "Sigma_%": t("col_sigma_pct", lang_code),
+    "Delta_Volumi_Intra": t("col_delta_vol", lang_code),
+    "%_Trader_In_Perdita": t("col_loss_pct", lang_code),
+    "Data_Previsione": t("col_forecast_date", lang_code),
+    "P10": t("col_p10", lang_code),
+    "Mediana": t("col_median", lang_code),
+    "P90": t("col_p90", lang_code),
+    "Rend_Mediano_%": t("col_med_ret_pct", lang_code),
+    "Incertezza_Sigma_%": t("col_uncertainty_pct", lang_code),
+    "Verdetto_Volumi": t("col_verdict_vol", lang_code),
+    "Maggioranza_Acquirenti": t("col_buyer_majority", lang_code),
+    "Posizione_Area_Valore": t("col_pos_va", lang_code),
+    "POC": t("col_poc", lang_code),
+    "VWAP": t("col_vwap", lang_code),
+    "VAL": t("col_val", lang_code),
+    "VAH": t("col_vah", lang_code),
+    "Sentiment News": t("col_sentiment", lang_code),
+    "Sintesi / Verdetto": t("col_verdict", lang_code),
+})
+
+colonne = ["Ticker", t("col_last_price", lang_code), t("col_trend", lang_code), t("col_sigma_pct", lang_code),
+           t("col_forecast_date", lang_code), t("col_p10", lang_code), t("col_median", lang_code),
+           t("col_p90", lang_code), t("col_med_ret_pct", lang_code), t("col_uncertainty_pct", lang_code),
+           t("col_delta_vol", lang_code), t("col_verdict_vol", lang_code), t("col_loss_pct", lang_code),
+           t("col_buyer_majority", lang_code), t("col_pos_va", lang_code), t("col_poc", lang_code),
+           t("col_vwap", lang_code), t("col_val", lang_code), t("col_vah", lang_code),
+           t("col_sentiment", lang_code), t("col_verdict", lang_code)]
+final_df = renamed[[c for c in colonne if c in renamed.columns]]
+ret_col = t("col_med_ret_pct", lang_code)
+trend_col = t("col_trend", lang_code)
+if ret_col in final_df:
+    final_df = final_df.sort_values(ret_col, ascending=False, na_position="last").reset_index(drop=True)
+
+# Backtesting / Walk-forward validation
+st.subheader("🧪 Backtesting / Walk-forward")
+if trend_col in final_df.columns:
+    bt_source = final_df.copy()
+    bt_source["signal"] = bt_source[trend_col].fillna("NEUTRAL")
+    bt_source["future_return"] = pd.to_numeric(bt_source.get(ret_col, 0), errors="coerce") / 100.0
+    bt_source = bt_source.dropna(subset=["future_return", "signal"]).reset_index(drop=True)
+    if not bt_source.empty and len(bt_source) >= 10:
+        train_window = max(5, min(20, len(bt_source) // 2))
+        test_window = max(3, min(10, len(bt_source) // 5))
+        backtest_df = walk_forward_backtest(bt_source, signal_col="signal", target_col="future_return",
+                                           train_window=train_window, test_window=test_window)
+        metrics = compute_strategy_metrics(bt_source, target_col="future_return")
+        if not backtest_df.empty:
+            st.dataframe(backtest_df, use_container_width=True)
+            st.caption(
+                f"Strategy metrics: win rate={metrics['win_rate']:.2%}, avg pnl={metrics['avg_pnl']:.2%}, "
+                f"mean return={metrics['mean_return']:.2%}"
+            )
+        else:
+            st.info("Not enough rows for a valid walk-forward backtest.")
+    else:
+        st.info("Backtesting requires a valid signal and return column.")
+else:
+    st.info("Backtesting not available: missing signal data.")
+
+c1, c2, c3, c4 = st.columns(4)
+c1.metric(t("metric_analyzed", lang_code), len(final_df))
+c2.metric(t("metric_buy_trend", lang_code), int((final_df[trend_col] == "BUY").sum()) if trend_col in final_df else 0)
+delta_col = t("col_delta_vol", lang_code)
+c3.metric(t("metric_avg_delta", lang_code), f"{final_df[delta_col].mean():.2f}%" if delta_col in final_df else "N/A")
+loss_col = t("col_loss_pct", lang_code)
+c4.metric(t("metric_avg_loss", lang_code), f"{final_df[loss_col].mean():.2f}%" if loss_col in final_df else "N/A")
+
+st.subheader(t("report_table_subheader", lang_code))
+st.dataframe(final_df, width="stretch")
+st.download_button(t("download_csv_button", lang_code), final_df.to_csv(index=False).encode("utf-8"),
+                    file_name="report_finale_integrato.csv", mime="text/csv", type="primary")
+
+st.subheader(t("charts_subheader", lang_code))
+g1, g2 = st.columns(2)
+with g1:
+    st.markdown(f"#### {t('chart_delta_title', lang_code)}")
+    fig1, ax1 = plt.subplots(figsize=(6, 4))
+    d = final_df[delta_col].fillna(0) if delta_col in final_df else pd.Series([0] * len(final_df))
+    ax1.bar(final_df["Ticker"], d, color=["#2e9e5b" if v >= 0 else "#d6453d" for v in d])
+    ax1.axhline(0, color="gray", ls="--", lw=0.8)
+    ax1.set_ylabel(t("chart_delta_ylabel", lang_code))
+    plt.setp(ax1.get_xticklabels(), rotation=90, fontsize=7)
+    st.pyplot(fig1)
+with g2:
+    st.markdown(f"#### {t('chart_loss_title', lang_code)}")
+    fig2, ax2 = plt.subplots(figsize=(6, 4))
+    p = final_df[loss_col].fillna(0) if loss_col in final_df else pd.Series([0] * len(final_df))
+    ax2.bar(final_df["Ticker"], p, color=["#d6453d" if v >= 60 else ("#2e9e5b" if v <= 40 else "#e08a00") for v in p])
+    ax2.axhline(60, color="#d6453d", ls=":", label=t("chart_loss_legend_loss", lang_code))
+    ax2.axhline(40, color="#2e9e5b", ls=":", label=t("chart_loss_legend_gain", lang_code))
+    ax2.set_ylabel(t("chart_loss_ylabel", lang_code))
+    ax2.legend(fontsize=7)
+    plt.setp(ax2.get_xticklabels(), rotation=90, fontsize=7)
+    st.pyplot(fig2)
+
+# Detail for ticker
+if nat and nat["vol"]:
+    st.subheader(t("detail_subheader", lang_code))
+    scelto = st.selectbox(t("select_ticker", lang_code), [r["Ticker"] for r in nat["vol"]])
+    r = next(x for x in nat["vol"] if x["Ticker"] == scelto)
+    if r["Avviso"]:
+        st.warning(r["Avviso"])
+
+    v_verdict = t("buy", lang_code) if r['Verdetto_Volumi'] == "BUY" else (
+        t("sell", lang_code) if r['Verdetto_Volumi'] == "SELL" else t("equilibrium", lang_code)
+    )
+    b_maj = buyer_maj_map.get(r['Maggioranza_Acquirenti'], r['Maggioranza_Acquirenti'])
+    p_pos = pos_va_map.get(r['Posizione_Area_Valore'], r['Posizione_Area_Valore'])
+
+    st.markdown(t("detail_summary", lang_code).format(
+        scelto, r['Prezzo_Riferimento'], nat['metodo'], r['Buy_%'], r['Sell_%'], r['Delta_Volumi_Intra'], v_verdict
+    ))
+    st.markdown(t("detail_vp_summary", lang_code).format(
+        r['POC'], r['VWAP'], r['VAL'], r['VAH'], r['%_Trader_In_Perdita'], r['%_Trader_In_Guadagno'], b_maj, p_pos
+    ))
+    if r["zona_sopra"]:
+        st.caption(t("resistance_caption", lang_code).format(r['zona_sopra']))
+    if r["zona_sotto"]:
+        st.caption(t("support_caption", lang_code).format(r['zona_sotto']))
+
+    vp = r["volume_profile"]
+    fig, ax = plt.subplots(figsize=(8, 5))
+    pa = r["Prezzo_Riferimento"]
+    ax.barh(vp["centri"], vp["profilo"], height=(vp["bins"][1] - vp["bins"][0]) * 0.95,
+            color=["#d6453d" if c > pa else "#2e9e5b" for c in vp["centri"]], edgecolor="white", linewidth=0.5)
+    ax.axhline(pa, color="black", lw=2, label=t("vp_chart_price", lang_code).format(pa))
+    ax.axhline(vp["poc"], color="#3b6fd6", ls="--", lw=1.5, label=t("vp_chart_poc", lang_code).format(vp['poc']))
+    ax.axhline(vp["vwap"], color="#e08a00", ls=":", lw=2, label=t("vp_chart_vwap", lang_code).format(vp['vwap']))
+    ax.axhspan(vp["val"], vp["vah"], color="gray", alpha=0.15, label=t("vp_chart_va", lang_code))
+    ax.set_title(t("vp_chart_title", lang_code))
+    ax.legend(loc="lower right", fontsize=8)
+    st.pyplot(fig)
+
+    t1, t2 = st.columns(2)
+    t1.markdown(f"**{t('top5_zones_title', lang_code)}**")
+    t1.dataframe(r["zone_top5"].set_index("Zona di prezzo"), width="stretch")
+    t2.markdown(f"**{t('daily_breakdown_title', lang_code)}**")
+    t2.dataframe(r["dettaglio_giorni"], width="stretch")
+
+st.caption(t("footer_disclaimer", lang_code))

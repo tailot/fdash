@@ -1,18 +1,20 @@
+"""
+Volume Engine: Intraday volume microstructure analysis.
+
+Calculation logic:
+  * 1-minute data (Yahoo: ~8 days), regular market hours only, volume > 0
+  * Buy/sell estimation using 3 methods (candle / clv / tick) and verdict with equilibrium threshold
+  * Volume Profile on typical price (H+L+C)/3: % in loss / profit, POC, VWAP, Value Area (VAL/VAH)
+  * Most active zones above/below price, top 5 zones, daily breakdown, textual conclusions
+"""
 import numpy as np
 import pandas as pd
 import yfinance as yf
 
+
 def stima_buy_sell(df: pd.DataFrame, metodo: str = "clv") -> pd.DataFrame:
-    """
-    Stima il volume di Buy e Sell minute-by-minute in base al metodo scelto.
-    Metodi disponibili:
-      - 'candela': buy se close > open, sell se close < open, 0.5 se pari.
-      - 'clv': Close Location Value -> ripartizione proporzionale nel range high-low.
-      - 'tick': confronto con il close precedente (tick rule).
-    """
     d = df.copy()
     v = d["Volume"].astype(float)
-
     if metodo == "candela":
         buy_share = np.where(d["Close"] > d["Open"], 1.0,
                      np.where(d["Close"] < d["Open"], 0.0, 0.5))
@@ -24,95 +26,191 @@ def stima_buy_sell(df: pd.DataFrame, metodo: str = "clv") -> pd.DataFrame:
         segno = np.sign(d["Close"].diff()).replace(0, np.nan).ffill().fillna(0)
         buy_share = np.where(segno > 0, 1.0, np.where(segno < 0, 0.0, 0.5))
     else:
-        raise ValueError(f"Metodo non valido: {metodo}")
-
+        raise ValueError(f"Invalid method: {metodo}")
     d["buy"] = v * buy_share
     d["sell"] = v * (1 - buy_share)
     d["delta"] = d["buy"] - d["sell"]
     return d
 
+
 def verdetto_delta(delta_pct: float, soglia: float = 2.0) -> str:
     if delta_pct > soglia:
         return "BUY"
-    elif delta_pct < -soglia:
+    if delta_pct < -soglia:
         return "SELL"
     return "EQUILIBRIO"
 
-def calcola_microstruttura_ticker(ticker: str, giorni: int = 1, data_fine: str = "", metodo: str = "clv",
-                                  solo_orari_regolari: bool = True, soglia_equilibrio: float = 2.0,
-                                  n_bin: int = 30, prezzo_riferimento: float = 0.0, area_valore_pct: float = 70.0) -> dict:
-    """
-    Scarica dati intraday a 1m da yfinance per il ticker fornito e calcola:
-      - Ultimo Prezzo
-      - Delta Volumi Intra %
-      - Verdetto Volumi (BUY / SELL / EQUILIBRIO)
-      - % Trader in Perdita (Volume Profile)
-      - Dettagli aggiuntivi (POC, VWAP, Area Valore, DataFrame per giorno)
-    """
-    raw = yf.download(ticker, period="8d", interval="1m",
-                      prepost=not solo_orari_regolari,
+
+def scarica_minuti(ticker: str, solo_orari_regolari: bool = True) -> pd.DataFrame:
+    raw = yf.download(ticker, period="8d", interval="1m", prepost=not solo_orari_regolari,
                       auto_adjust=False, progress=False)
     if raw.empty:
-        raise ValueError(f"Nessun dato scaricato per il ticker '{ticker}'. Verifica il simbolo.")
+        raise ValueError(f"No data downloaded for ticker '{ticker}'. Please check the symbol.")
+    return raw
 
+
+def prepara_minuti(raw: pd.DataFrame, giorni: int = 1, data_fine: str = ""):
+    """Cleaning and selection of the last `giorni` days. Returns (df, selected_days, warning)."""
     df = raw.copy()
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
-
     df = df[["Open", "High", "Low", "Close", "Volume"]].dropna()
     df = df[df["Volume"] > 0]
     df["giorno"] = df.index.date
 
-    giorni_disponibili = sorted(df["giorno"].unique())
+    disponibili = sorted(df["giorno"].unique())
     if data_fine:
         limite = pd.Timestamp(data_fine).date()
-        giorni_disponibili = [g for g in giorni_disponibili if g <= limite]
+        disponibili = [g for g in disponibili if g <= limite]
+    scelti = disponibili[-giorni:]
+    if not scelti:
+        raise ValueError("No day available for the chosen date (1-minute data covers only ~8 days).")
+    avviso = ""
+    if len(scelti) < giorni:
+        avviso = f"Warning: only {len(scelti)} days available out of {giorni} requested."
+    return df[df["giorno"].isin(scelti)].copy(), scelti, avviso
 
-    giorni_scelti = giorni_disponibili[-giorni:]
-    if not giorni_scelti:
-        raise ValueError(f"Nessun giorno disponibile per {ticker} con la data richiesta.")
 
-    df = df[df["giorno"].isin(giorni_scelti)].copy()
+def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_valore_pct: float = 70.0) -> dict:
+    """Calculation of Volume Profile: loss/profit shares, POC, VWAP, Value Area, high-volume zones."""
+    tp = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy()
+    vol = df["Volume"].to_numpy(dtype=float)
+    vol_tot = vol.sum()
 
-    # 1. Buy/Sell Delta Estimation
+    perdita = vol[tp > prezzo_att].sum()
+    guadagno = vol[tp < prezzo_att].sum()
+    pari = vol_tot - perdita - guadagno
+
+    lo, hi = tp.min(), tp.max()
+    if hi == lo:                                   # Static price: avoid degenerate bins
+        lo, hi = lo - 1e-6, hi + 1e-6
+    bins = np.linspace(lo, hi, n_bin + 1)
+    idx = np.clip(np.digitize(tp, bins) - 1, 0, n_bin - 1)
+    profilo = np.bincount(idx, weights=vol, minlength=n_bin)
+    centri = (bins[:-1] + bins[1:]) / 2
+
+    poc = centri[profilo.argmax()]
+    vwap = (tp * vol).sum() / vol_tot
+
+    ordine = np.argsort(profilo)[::-1]
+    cum = np.cumsum(profilo[ordine])
+    n_area = np.searchsorted(cum, vol_tot * area_valore_pct / 100) + 1
+    bin_area = ordine[:n_area]
+    val, vah = centri[bin_area].min(), centri[bin_area].max()
+
+    sopra = [i for i in range(n_bin) if centri[i] > prezzo_att]
+    sotto = [i for i in range(n_bin) if centri[i] < prezzo_att]
+    zona_sopra = max(sopra, key=lambda i: profilo[i]) if sopra else None
+    zona_sotto = max(sotto, key=lambda i: profilo[i]) if sotto else None
+
+    def fmt_zona(i):
+        return f"{bins[i]:.2f} - {bins[i+1]:.2f} ({profilo[i]/vol_tot*100:.1f}% of volume)"
+
+    top = sorted(np.argsort(profilo)[::-1][:5], key=lambda k: -profilo[k])
+    zone = pd.DataFrame([{
+        "Zona di prezzo": f"{bins[i]:.2f} - {bins[i+1]:.2f}",
+        "% del volume": round(profilo[i] / vol_tot * 100, 1),
+        "Posizione": "above price (in loss)" if centri[i] > prezzo_att else "below price (in profit)",
+        "Distanza dal prezzo %": round((centri[i] / prezzo_att - 1) * 100, 2),
+    } for i in top])
+
+    return {
+        "pct_perdita": perdita / vol_tot * 100, "pct_guadagno": guadagno / vol_tot * 100,
+        "pct_pari": pari / vol_tot * 100, "poc": poc, "vwap": vwap, "val": val, "vah": vah,
+        "bins": bins, "centri": centri, "profilo": profilo,
+        "zona_sopra": None if zona_sopra is None else fmt_zona(zona_sopra),
+        "zona_sotto": None if zona_sotto is None else fmt_zona(zona_sotto),
+        "zone_top5": zone,
+    }
+
+
+def conclusioni(pct_perdita: float, prezzo_att: float, val: float, vah: float):
+    """Majority thresholds: >=60% loss, <=40% profit, otherwise mixed."""
+    if pct_perdita >= 60:
+        maggioranza = "PERDITA"
+    elif pct_perdita <= 40:
+        maggioranza = "GUADAGNO"
+    else:
+        maggioranza = "MISTA"
+    if prezzo_att > vah:
+        posizione = "SOPRA"
+    elif prezzo_att < val:
+        posizione = "SOTTO"
+    else:
+        posizione = "DENTRO"
+    return maggioranza, posizione
+
+
+def dettaglio_per_giorno(df: pd.DataFrame, prezzo_att: float, soglia: float = 2.0) -> pd.DataFrame:
+    """Daily aggregation tables for volume and positioning."""
+    tp_all = (df["High"] + df["Low"] + df["Close"]) / 3
+    righe = []
+    for g, d in df.groupby("giorno"):
+        tot = d["Volume"].sum()
+        b, s = d["buy"].sum(), d["sell"].sum()
+        dp = (b - s) / tot * 100
+        v = d["Volume"].to_numpy(dtype=float)
+        p = tp_all.loc[d.index].to_numpy()
+        righe.append({
+            "Giorno": g, "Volume totale": int(tot), "Buy": int(b), "Sell": int(s), "Delta": int(b - s),
+            "Delta %": round(dp, 2),
+            "Minuti buy": int((d["delta"] > 0).sum()), "Minuti sell": int((d["delta"] < 0).sum()),
+            "Vincitore": verdetto_delta(dp, soglia),
+            "% in perdita": round(v[p > prezzo_att].sum() / v.sum() * 100, 1),
+            "% in guadagno": round(v[p < prezzo_att].sum() / v.sum() * 100, 1),
+            "VWAP giorno": round((p * v).sum() / v.sum(), 2),
+        })
+    return pd.DataFrame(righe).set_index("Giorno")
+
+
+def calcola_microstruttura_ticker(ticker: str, giorni: int = 1, data_fine: str = "", metodo: str = "clv",
+                                  solo_orari_regolari: bool = True, soglia_equilibrio: float = 2.0,
+                                  n_bin: int = 30, prezzo_riferimento: float = 0.0, area_valore_pct: float = 70.0,
+                                  raw: pd.DataFrame = None) -> dict:
+    """
+    Complete ticker analysis. `raw` allows passing pre-downloaded minute data
+    (useful for testing); otherwise data is fetched from yfinance.
+    """
+    if raw is None:
+        raw = scarica_minuti(ticker, solo_orari_regolari)
+    df, giorni_scelti, avviso = prepara_minuti(raw, giorni, data_fine)
+
     df = stima_buy_sell(df, metodo)
     tot_vol = df["Volume"].sum()
-    buy_vol = df["buy"].sum()
-    sell_vol = df["sell"].sum()
-    delta_vol = buy_vol - sell_vol
-    delta_pct = (delta_vol / tot_vol) * 100 if tot_vol > 0 else 0.0
+    buy_vol, sell_vol = df["buy"].sum(), df["sell"].sum()
+    delta_pct = (buy_vol - sell_vol) / tot_vol * 100 if tot_vol > 0 else 0.0
     verdetto = verdetto_delta(delta_pct, soglia_equilibrio)
 
     ultimo_prezzo = float(df["Close"].iloc[-1])
-    prezzo_ref = prezzo_riferimento if prezzo_riferimento > 0 else ultimo_prezzo
+    prezzo_att = prezzo_riferimento if prezzo_riferimento > 0 else ultimo_prezzo
+    df["prezzo_tipico"] = (df["High"] + df["Low"] + df["Close"]) / 3
 
-    # 2. Volume Profile & % Trader In Perdita
-    df["prezzo_tipico"] = (df["High"] + df["Low"] + df["Close"]) / 3.0
-    tp = df["prezzo_tipico"].to_numpy()
-    vol = df["Volume"].to_numpy(dtype=float)
-
-    vol_loss = vol[tp > prezzo_ref].sum()
-    vol_gain = vol[tp < prezzo_ref].sum()
-    pct_perdita = (vol_loss / tot_vol * 100) if tot_vol > 0 else 0.0
-    pct_guadagno = (vol_gain / tot_vol * 100) if tot_vol > 0 else 0.0
-
-    vwap = (tp * vol).sum() / tot_vol if tot_vol > 0 else ultimo_prezzo
-
-    bins = np.linspace(tp.min(), tp.max(), n_bin + 1)
-    idx = np.clip(np.digitize(tp, bins) - 1, 0, n_bin - 1)
-    profilo = np.bincount(idx, weights=vol, minlength=n_bin)
-    centri = (bins[:-1] + bins[1:]) / 2.0
-    poc = centri[profilo.argmax()]
+    vp = volume_profile(df, prezzo_att, n_bin, area_valore_pct)
+    maggioranza, posizione = conclusioni(vp["pct_perdita"], prezzo_att, vp["val"], vp["vah"])
 
     return {
         "Ticker": ticker.upper(),
         "Ultimo_Prezzo": round(ultimo_prezzo, 2),
+        "Prezzo_Riferimento": round(prezzo_att, 2),
         "Delta_Volumi_Intra": round(delta_pct, 2),
         "Verdetto_Volumi": verdetto,
-        "%_Trader_In_Perdita": round(pct_perdita, 2),
-        "%_Trader_In_Guadagno": round(pct_guadagno, 2),
-        "POC": round(poc, 2),
-        "VWAP": round(vwap, 2),
+        "Buy_%": round(buy_vol / tot_vol * 100, 1),
+        "Sell_%": round(sell_vol / tot_vol * 100, 1),
+        "%_Trader_In_Perdita": round(vp["pct_perdita"], 2),
+        "%_Trader_In_Guadagno": round(vp["pct_guadagno"], 2),
+        "Maggioranza_Acquirenti": maggioranza,          # PERDITA / GUADAGNO / MISTA
+        "Posizione_Area_Valore": posizione,             # SOPRA / SOTTO / DENTRO
+        "POC": round(vp["poc"], 2),
+        "VWAP": round(vp["vwap"], 2),
+        "VAL": round(vp["val"], 2),
+        "VAH": round(vp["vah"], 2),
         "Volume_Totale": int(tot_vol),
-        "df_minuti": df
+        "Giorni_Analizzati": len(giorni_scelti),
+        "Avviso": avviso,
+        "zona_sopra": vp["zona_sopra"],
+        "zona_sotto": vp["zona_sotto"],
+        "zone_top5": vp["zone_top5"],
+        "dettaglio_giorni": dettaglio_per_giorno(df, prezzo_att, soglia_equilibrio),
+        "df_minuti": df,
+        "volume_profile": vp,
     }

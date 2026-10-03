@@ -1,0 +1,14 @@
+services:
+  financial-dashboard:
+    build: .
+    container_name: financial_master_dashboard
+    ports:
+      - "8501:8501"
+    volumes:
+      - hf_cache:/app/.cache/huggingface
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+
+volumes:
+  hf_cache:
