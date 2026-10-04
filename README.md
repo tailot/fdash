@@ -1,119 +1,127 @@
-# Dashboard Master di Analisi Finanziaria Integrata
+# Integrated Master Financial Analysis Dashboard
 
-Applicazione web interattiva realizzata in **Python** e **Streamlit** che agisce da **Dashboard Master di Analisi Finanziaria**.
+Interactive web application built in **Python** and **Streamlit** that serves as a **Master Financial Analysis Dashboard**.
 
-L'applicazione calcola **nativamente** le metriche quantitative e volumetriche (inclusa la previsione probabilistica quantilica multi-giorno TimesFM-3). Utilizza inoltre l'API di **Gemini 2.5 Flash** (`gemini-2.5-flash`) per generare analisi qualitative sul sentiment delle notizie e un verdetto finanziario integrato.
+The application natively calculates quantitative and volumetric metrics (including TimesFM-3 multi-day probabilistic quantile forecasting). It also utilizes the **Gemini 2.5 Flash** API (`gemini-2.5-flash`) to generate qualitative news sentiment analysis and an integrated financial verdict.
 
----
-
-## 🌟 Funzionalità Principali
-
-Il calcolo nativo comprende:
-
-1. **Previsione quantitativa — `quant_engine.py`**
-   - Universo: i top N titoli NASDAQ per market cap (screener Nasdaq, fallback Wikipedia Nasdaq-100), doppie classi eliminate; oppure lista manuale.
-   - Prezzi aggiustati 5y su calendario comune (titoli con storico <99% scartati, buchi isolati riempiti).
-   - **TimesFM-3 sui rendimenti log** (contesto 1024 gg): decili → mediana, P10, P90; sigma per passo `(P90−P10)/(2·Z80)`, cumulata come radice della somma dei quadrati; `P10/Mediana/P90 = ultimo · exp(μ ∓ Z80·σ)`.
-   - Output: `Ultimo Prezzo`, `Data previsione`, `P10`, `Mediana`, `P90`, `Rend. mediano %`, `Incertezza (sigma) %`, ordinati per rendimento mediano. Colonne aggiuntive della dashboard: `Trend TimesFM` (BUY/SELL/EQUILIBRIO se |μ| > soglia·σ, soglia regolabile) e `Sigma %` (volatilità annualizzata).
-   - **Senza `timesfm3` installato** l'app usa la baseline *Naive (0%)* e lo segnala (colonna `Modello` + avviso): niente trend inventati.
-2. **Volumi al minuto — `volume_engine.py`**
-   - Dati a 1 minuto (~8 giorni), 1-5 giorni, `DATA_FINE`, orari regolari, metodi `candela` / `clv` / `tick`, soglia di equilibrio.
-   - Volume Profile su prezzo tipico (H+L+C)/3: `% in perdita/guadagno`, POC, VWAP, area di valore (VAL/VAH), zone più affollate sopra/sotto, top 5 zone, dettaglio per giorno, conclusioni (soglie 60% / 40%).
-3. **Dati**: la dashboard calcola tutto nativamente (nessun caricamento di CSV né lettura da cartella).
-4. **Arricchimento (Gemini 2.5 Flash o euristica locale)**: `Sentiment News` e `Sintesi / Verdetto`, con le stesse soglie di analisi. I dati mancanti sono "n/d", mai riempiti con valori fittizi. Nota: Gemini non ha accesso alle notizie in tempo reale.
-5. **Report**: tabella integrata (join *outer* su `Ticker`), download `report_finale_integrato.csv`, grafici comparativi e, per il calcolo nativo, il dettaglio per ticker (Volume Profile, tabelle).
-
-> ⚠️ Nota: buy/sell è una **stima** dalle candele (non vero order flow); "in perdita/guadagno" considera solo i volumi del periodo; l'universo "top N di oggi" ha survivorship bias. Non è un consiglio di investimento.
+The user interface supports **multilingual localization** in 5 major global languages: **English, Italian, Spanish, Chinese, and French**.
 
 ---
 
-## 🚀 Requisiti e Installazione Locale (Senza Docker)
+## 🌟 Key Features
 
-### 1. Prerequisiti
-- **Python 3.10+** installato sul sistema.
-- (Opzionale) Chiave API Google Gemini per abilitare l'analisi AI in tempo reale.
+Native calculations include:
 
-### 2. Installazione Dipendenze
-Clona o scarica la repository, quindi installa i pacchetti richiesti:
+1. **Quantitative Forecasting — `quant_engine.py`**
+   - Universe: top N NASDAQ stocks by market cap (Nasdaq screener, Wikipedia Nasdaq-100 fallback), dual share classes eliminated; or manual list.
+   - Adjusted prices over 5 years on a common calendar (stocks with <99% history discarded, isolated gaps filled).
+   - **TimesFM-3 on log returns** (1024-day context window): deciles → median, P10, P90; step sigma `(P90−P10)/(2·Z80)`, cumulative sigma as root sum of squares; `P10/Median/P90 = last · exp(μ ∓ Z80·σ)`.
+   - Output: `Last Price`, `Forecast Date`, `P10`, `Median`, `P90`, `Median Return %`, `Uncertainty (sigma) %`, sorted by median return. Additional dashboard columns: `TimesFM Trend` (BUY/SELL/EQUILIBRIO if |μ| > threshold·σ, adjustable threshold) and `Sigma %` (annualized volatility).
+   - **Without `timesfm3` installed**, the app uses the *Naive (0%)* baseline and flags it (`Model` column + warning): no fabricated trends.
+2. **1-Minute Volumes — `volume_engine.py`**
+   - 1-minute intraday data (~8 days), 1-5 days, `end_date`, regular trading hours, `candle` / `clv` / `tick` methods, equilibrium threshold.
+   - Volume Profile on typical price (H+L+C)/3: `% in loss/profit`, POC, VWAP, Value Area (VAL/VAH), most crowded zones above/below price, top 5 zones, daily breakdown, textual conclusions (60% / 40% thresholds).
+3. **Multilingual UI & AI Enrichment — `i18n.py` & `gemini_enrichment.py`**:
+   - Supports 5 widely spoken languages selectable directly from the sidebar: English 🇬🇧, Italian 🇮🇹, Spanish 🇪🇸, Chinese 🇨🇳, French 🇫🇷.
+   - Qualitative columns `Sentiment News` and `Summary / Verdict` are dynamically generated in the user's selected language using Gemini 2.5 Flash or localized heuristic fallback rules. Missing data is marked as "N/A" and never hallucinated.
+4. **Data**: The dashboard calculates everything natively (no CSV uploading or folder reads required).
+5. **Report**: Integrated table (outer join on `Ticker`), CSV report download `report_finale_integrato.csv`, comparative charts, and per-ticker Volume Profile detail breakdowns.
+
+> ⚠️ Note: Buy/sell is an **estimate** from 1-minute candles (not actual order flow); "in loss/profit" considers only volumes in the period; today's top N universe carries survivorship bias. Statistical analysis, not investment advice.
+
+---
+
+## 🚀 Requirements & Local Setup (Without Docker)
+
+### 1. Prerequisites
+- **Python 3.10+** installed on the system.
+- (Optional) Google Gemini API Key to enable AI news sentiment enrichment.
+
+### 2. Dependency Installation
+Clone or download the repository, then install the required packages:
 
 ```bash
-pip install -r requirements.txt            # senza TimesFM-3 (baseline Naive)
-pip install -r requirements-timesfm.txt    # opzionale: TimesFM-3 reale
+pip install -r requirements.txt            # without TimesFM-3 (Naive baseline)
+pip install -r requirements-timesfm.txt    # optional: real TimesFM-3 model
 ```
 
-### 3. Avvio dell'Applicazione
-Per lanciare la dashboard Streamlit localmente:
+### 3. Running the Application
+To launch the Streamlit dashboard locally:
 
 ```bash
 streamlit run app.py
 ```
 
-L'applicazione si aprirà automaticamente nel browser all'indirizzo `http://localhost:8501`.
+The application will open automatically in your browser at `http://localhost:8501`.
 
 ---
 
-## 🐳 Avvio tramite Docker
+## 🐳 Running via Docker
 
-È possibile avviare l'applicazione in modo isolato ed automatizzato utilizzando **Docker** o **Docker Compose**.
+You can run the application isolated in a container using **Docker** or **Docker Compose**.
 
-### Opzione A: Con Docker Compose (Consigliato)
+### Option A: With Docker Compose (Recommended)
 
-1. Avvia il container:
+1. Start the container:
    ```bash
    docker compose up --build
    ```
-2. Apri il browser all'indirizzo: `http://localhost:8501`
-3. Per fermare il container:
+2. Open your browser at: `http://localhost:8501`
+3. To stop the container:
    ```bash
    docker compose down
    ```
 
-### Opzione B: Con Docker CLI
+### Option B: With Docker CLI
 
-1. Costruisci l'immagine Docker:
+1. Build the Docker image:
    ```bash
    docker build -t financial-dashboard .
    ```
-2. Esegui il container:
+2. Run the container:
    ```bash
    docker run -d -p 8501:8501 --name financial_dashboard financial-dashboard
    ```
-3. Apri il browser all'indirizzo: `http://localhost:8501`
+3. Open your browser at: `http://localhost:8501`
 
 ---
 
-## ⚙️ Uso dell'Applicazione
+## ⚙️ Using the Application
 
-1. **Inserisci la Chiave API Gemini (opzionale):**
-   - Nella barra laterale (*Sidebar*), inserisci la tua API Key per utilizzare il modello `gemini-2.5-flash`. Se lasciata vuota, l'app genererà un'analisi euristica integrata di fallback.
-2. **Imposta i parametri** nella barra laterale: ticker (lista manuale o top N Nasdaq), orizzonte, metodo buy/sell, giorni, ecc., poi premi **«Esegui Analisi Nativa»**.
-3. **Esporta il Report:**
-   - Clicca sul pulsante **"Scarica report_finale_integrato.csv"** per esportare i dati integrati.
+1. **Select Language:**
+   - Choose your preferred language (English, Italian, Spanish, Chinese, French) from the sidebar language dropdown.
+2. **Enter Gemini API Key (Optional):**
+   - In the sidebar, enter your API key to enable `gemini-2.5-flash`. If left empty, the app will generate integrated local heuristic analysis.
+3. **Configure Parameters:**
+   - Set universe parameters (manual list or top N Nasdaq), forecast horizon, volume estimation method, analyzed days, etc., then click **"Run Native Analysis"**.
+4. **Export Report:**
+   - Click the **"Download report_finale_integrato.csv"** button to export integrated results.
 
 ---
 
-## 🧪 Esecuzione dei Test Unitari
+## 🧪 Running Unit Tests
 
-I test sono offline (dati sintetici e forecaster simulato, nessun accesso a Yahoo/Nasdaq) e verificano le formule di calcolo:
+Tests are offline (synthetic data and mocked forecaster, no live network calls to Yahoo/Nasdaq) and verify calculation formulas and multilingual i18n support:
 
 ```bash
-pytest test_modules.py
+python3 -m pytest test_modules.py
 ```
 
 ---
 
-## 📁 Struttura del Progetto
+## 📁 Project Structure
 
 ```
 .
-├── app.py                   # Dashboard principale Streamlit
-├── quant_engine.py          # Pipeline quantitativa TimesFM-3 (universo, prezzi, rendimenti log, quantili)
-├── volume_engine.py         # Pipeline volumi (buy/sell, Volume Profile, area di valore)
-├── gemini_enrichment.py     # Integrazione API Gemini 2.5 Flash
-├── test_modules.py          # Suite di test unitari
-├── requirements.txt         # Dipendenze Python
-├── requirements-timesfm.txt # Dipendenze opzionali per TimesFM-3
-├── Dockerfile               # Configurazione per la creazione dell'immagine Docker
-├── docker-compose.yml       # Configurazione Docker Compose
-└── README.md                # Guida all'uso del progetto
+├── app.py                   # Main Streamlit dashboard UI
+├── i18n.py                  # Internationalization module (EN, IT, ES, ZH, FR)
+├── quant_engine.py          # Quantitative pipeline (universe, prices, log returns, quantiles)
+├── volume_engine.py         # Volume microstructure pipeline (buy/sell estimation, Volume Profile)
+├── gemini_enrichment.py     # Gemini 2.5 Flash API integration & multilingual fallback
+├── test_modules.py          # Unit test suite
+├── requirements.txt         # Standard Python dependencies
+├── requirements-timesfm.txt # Optional dependencies for TimesFM-3
+├── Dockerfile               # Docker build configuration
+├── docker-compose.yml       # Docker Compose setup
+└── README.md                # Project documentation
 ```
