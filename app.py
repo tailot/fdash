@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from volume_engine import calcola_microstruttura_ticker
 from quant_engine import calcola_previsioni, carica_timesfm3, HORIZON, SOGLIA_TREND, MODELLO_FALLBACK
 from heuristic_enrichment import genera_analisi_euristica
+from backtesting import walk_forward_backtest, compute_strategy_metrics
 from i18n import t, LANGUAGES
 
 # Page config
@@ -43,7 +44,7 @@ else:
 st.sidebar.subheader(t("forecast_header", lang_code))
 horizon = st.sidebar.slider(t("horizon_slider", lang_code), 1, 20, HORIZON)
 soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
-                                       help=t("trend_threshold_help", lang_code))
+                                        help=t("trend_threshold_help", lang_code))
 usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=True)
 
 st.sidebar.subheader(t("volume_header", lang_code))
@@ -62,7 +63,7 @@ if st.sidebar.button(t("run_analysis_button", lang_code), type="primary"):
     with st.spinner(t("download_prices_spinner", lang_code)):
         try:
             dfq, info = calcola_previsioni(manuali, n_tickers=n_top, horizon=horizon,
-                                           forecaster=forecaster, soglia_trend=soglia_trend)
+                                            forecaster=forecaster, soglia_trend=soglia_trend)
         except Exception as e:
             st.error(t("forecast_failed", lang_code).format(e))
             st.stop()
@@ -96,7 +97,7 @@ df_quant = nat["quant"]
 df_vol = pd.DataFrame([{k: v for k, v in r.items()
                         if not isinstance(v, (pd.DataFrame, dict)) and k != "zone_top5"}
                        for r in nat["vol"]]) if nat["vol"] else pd.DataFrame(
-                           columns=["Ticker", "Delta_Volumi_Intra", "%_Trader_In_Perdita"])
+                            columns=["Ticker", "Delta_Volumi_Intra", "%_Trader_In_Perdita"])
 
 info = nat["info"]
 modello = df_quant["Modello"].iloc[0] if "Modello" in df_quant else ""
@@ -194,12 +195,38 @@ colonne = ["Ticker", t("col_last_price", lang_code), t("col_trend", lang_code), 
            t("col_sentiment", lang_code), t("col_verdict", lang_code)]
 final_df = renamed[[c for c in colonne if c in renamed.columns]]
 ret_col = t("col_med_ret_pct", lang_code)
+trend_col = t("col_trend", lang_code)
 if ret_col in final_df:
     final_df = final_df.sort_values(ret_col, ascending=False, na_position="last").reset_index(drop=True)
 
+# Backtesting / Walk-forward validation
+st.subheader("🧪 Backtesting / Walk-forward")
+if trend_col in final_df.columns:
+    bt_source = final_df.copy()
+    bt_source["signal"] = bt_source[trend_col].fillna("NEUTRAL")
+    bt_source["future_return"] = pd.to_numeric(bt_source.get(ret_col, 0), errors="coerce") / 100.0
+    bt_source = bt_source.dropna(subset=["future_return", "signal"]).reset_index(drop=True)
+    if not bt_source.empty and len(bt_source) >= 10:
+        train_window = max(5, min(20, len(bt_source) // 2))
+        test_window = max(3, min(10, len(bt_source) // 5))
+        backtest_df = walk_forward_backtest(bt_source, signal_col="signal", target_col="future_return",
+                                           train_window=train_window, test_window=test_window)
+        metrics = compute_strategy_metrics(bt_source, target_col="future_return")
+        if not backtest_df.empty:
+            st.dataframe(backtest_df, use_container_width=True)
+            st.caption(
+                f"Strategy metrics: win rate={metrics['win_rate']:.2%}, avg pnl={metrics['avg_pnl']:.2%}, "
+                f"mean return={metrics['mean_return']:.2%}"
+            )
+        else:
+            st.info("Not enough rows for a valid walk-forward backtest.")
+    else:
+        st.info("Backtesting requires a valid signal and return column.")
+else:
+    st.info("Backtesting not available: missing signal data.")
+
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(t("metric_analyzed", lang_code), len(final_df))
-trend_col = t("col_trend", lang_code)
 c2.metric(t("metric_buy_trend", lang_code), int((final_df[trend_col] == "BUY").sum()) if trend_col in final_df else 0)
 delta_col = t("col_delta_vol", lang_code)
 c3.metric(t("metric_avg_delta", lang_code), f"{final_df[delta_col].mean():.2f}%" if delta_col in final_df else "N/A")
@@ -209,7 +236,7 @@ c4.metric(t("metric_avg_loss", lang_code), f"{final_df[loss_col].mean():.2f}%" i
 st.subheader(t("report_table_subheader", lang_code))
 st.dataframe(final_df, width="stretch")
 st.download_button(t("download_csv_button", lang_code), final_df.to_csv(index=False).encode("utf-8"),
-                   file_name="report_finale_integrato.csv", mime="text/csv", type="primary")
+                    file_name="report_finale_integrato.csv", mime="text/csv", type="primary")
 
 st.subheader(t("charts_subheader", lang_code))
 g1, g2 = st.columns(2)
