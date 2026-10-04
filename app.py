@@ -12,6 +12,20 @@ from i18n import t, LANGUAGES
 # Page config
 st.set_page_config(page_title="Master Financial Analysis Dashboard", page_icon="📈", layout="wide")
 
+# Hide top-right Streamlit header/menu buttons via custom CSS
+st.markdown(
+    """
+    <style>
+    #MainMenu {visibility: hidden;}
+    header {visibility: hidden;}
+    [data-testid="stHeader"] {visibility: hidden;}
+    [data-testid="stToolbar"] {visibility: hidden;}
+    [data-testid="stHeaderActionElements"] {visibility: hidden;}
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
 # Sidebar - Language Selection
 st.sidebar.header("⚙️ Options")
 lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAGES.keys()),
