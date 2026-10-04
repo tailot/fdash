@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from volume_engine import calcola_microstruttura_ticker
 from quant_engine import calcola_previsioni, carica_timesfm3, HORIZON, SOGLIA_TREND, MODELLO_FALLBACK
 from heuristic_enrichment import genera_analisi_euristica
-from backtesting import walk_forward_backtest, compute_strategy_metrics
+from backtesting import backtest_temporale, riepilogo_backtest_temporale
 from i18n import t, LANGUAGES
 
 # Page config
@@ -199,31 +199,39 @@ trend_col = t("col_trend", lang_code)
 if ret_col in final_df:
     final_df = final_df.sort_values(ret_col, ascending=False, na_position="last").reset_index(drop=True)
 
-# Backtesting / Walk-forward validation
+# Backtesting / Walk-forward validation (temporal: point-in-time forecast vs realized return)
 st.subheader("🧪 Backtesting / Walk-forward")
-if trend_col in final_df.columns:
-    bt_source = final_df.copy()
-    bt_source["signal"] = bt_source[trend_col].fillna("NEUTRAL")
-    bt_source["future_return"] = pd.to_numeric(bt_source.get(ret_col, 0), errors="coerce") / 100.0
-    bt_source = bt_source.dropna(subset=["future_return", "signal"]).reset_index(drop=True)
-    if not bt_source.empty and len(bt_source) >= 10:
-        train_window = max(5, min(20, len(bt_source) // 2))
-        test_window = max(3, min(10, len(bt_source) // 5))
-        backtest_df = walk_forward_backtest(bt_source, signal_col="signal", target_col="future_return",
-                                           train_window=train_window, test_window=test_window)
-        metrics = compute_strategy_metrics(bt_source, target_col="future_return")
-        if not backtest_df.empty:
-            st.dataframe(backtest_df, use_container_width=True)
-            st.caption(
-                f"Strategy metrics: win rate={metrics['win_rate']:.2%}, avg pnl={metrics['avg_pnl']:.2%}, "
-                f"mean return={metrics['mean_return']:.2%}"
-            )
-        else:
-            st.info("Not enough rows for a valid walk-forward backtest.")
-    else:
-        st.info("Backtesting requires a valid signal and return column.")
+prezzi_bt = info.get("prezzi")
+if prezzi_bt is None:
+    st.info("Backtesting not available: re-run the analysis to load the price history.")
+elif modello == MODELLO_FALLBACK:
+    st.info("Backtesting requires TimesFM-3: the Naive baseline always returns EQUILIBRIO.")
 else:
-    st.info("Backtesting not available: missing signal data.")
+    st.caption(f"Forecasts are recomputed on past dates using only data available at that date, then compared "
+               f"with the realized return over the next {horizon} days (non-overlapping windows).")
+    n_date_bt = st.number_input("Number of past dates", 5, 100, 30, 5, key="bt_n_date")
+    if st.button("Run temporal backtest", key="bt_run"):
+        barra_bt = st.progress(0.0)
+        try:
+            bt_df = backtest_temporale(prezzi_bt, horizon=horizon, forecaster=get_forecaster(),
+                                       soglia_trend=soglia_trend, n_date=int(n_date_bt),
+                                       progress=barra_bt.progress)
+            st.session_state["bt_result"] = (info["run_ts"], bt_df)
+        except Exception as e:
+            st.error(f"Backtest failed: {e}")
+        barra_bt.empty()
+    saved = st.session_state.get("bt_result")
+    if saved and saved[0] == info["run_ts"]:
+        riepilogo, per_segnale = riepilogo_backtest_temporale(saved[1])
+        b1, b2, b3, b4 = st.columns(4)
+        b1.metric("Observations", riepilogo["n_obs"])
+        b2.metric("Directional signals", riepilogo["n_active"])
+        b3.metric("Hit rate", f"{riepilogo['hit_rate']:.1%}" if riepilogo["n_active"] else "N/A")
+        b4.metric("Avg P&L / signal", f"{riepilogo['avg_pnl_active']:.2%}" if riepilogo["n_active"] else "N/A",
+                  delta=f"{riepilogo['avg_pnl_active'] - riepilogo['avg_return_all']:.2%} vs buy&hold"
+                  if riepilogo["n_active"] else None)
+        st.dataframe(per_segnale, use_container_width=True)
+        st.caption("Few observations = noisy metrics. Statistical analysis, not investment advice.")
 
 c1, c2, c3, c4 = st.columns(4)
 c1.metric(t("metric_analyzed", lang_code), len(final_df))

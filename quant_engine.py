@@ -215,7 +215,7 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
                        soglia_trend: float = SOGLIA_TREND, min_tickers: int = 20):
     """
     Complete forecast pipeline. `tickers=None` -> automatic universe (top n_tickers NASDAQ by market cap).
-    Returns (df_previsioni, info) with info = {fonte, scartati, giorni, dal, al, run_ts}.
+    Returns (df_previsioni, info) with info = {fonte, scartati, giorni, dal, al, run_ts, prezzi}.
     """
     uni, fonte, cand = ricava_universo(n_tickers, buffer, tickers)
     n_target = len(cand) if tickers else n_tickers
@@ -228,7 +228,8 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
     df = tabella_previsioni(prices, horizon, forecaster, mc_map, use_symmetric_averaging, soglia_trend)
     info = {"fonte": fonte, "scartati": scartati, "giorni": len(prices),
             "dal": prices.index[0].date(), "al": prices.index[-1].date(),
-            "run_ts": datetime.now().strftime("%Y-%m-%d %H:%M")}
+            "run_ts": datetime.now().strftime("%Y-%m-%d %H:%M"),
+            "prezzi": prices}
     return df, info
 
 
