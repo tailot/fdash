@@ -164,22 +164,27 @@ def test_i18n_translation_keys():
 def test_heuristic_enrichment_multilingual():
     e_en = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="en")
     assert "Market sentiment on MSTR" in e_en["Sentiment News"]
+    assert "Advanced sentiment:" in e_en["Sentiment News"]
     assert "aligned" in e_en["Sintesi / Verdetto"]
 
     e_it = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="it")
     assert "Sentiment di mercato su MSTR" in e_it["Sentiment News"]
+    assert "Sentiment avanzato:" in e_it["Sentiment News"]
     assert "coerenti" in e_it["Sintesi / Verdetto"]
 
     e_es = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="es")
     assert "Sentimiento de mercado para MSTR" in e_es["Sentiment News"]
+    assert "Sentimiento avanzado:" in e_es["Sentiment News"]
     assert "coherentes" in e_es["Sintesi / Verdetto"]
 
     e_zh = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="zh")
     assert "MSTR 的市场情绪" in e_zh["Sentiment News"]
+    assert "高级情绪分析：" in e_zh["Sentiment News"]
     assert "一致" in e_zh["Sintesi / Verdetto"]
 
     e_fr = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="fr")
     assert "Sentiment du marché sur MSTR" in e_fr["Sentiment News"]
+    assert "Sentiment avancé:" in e_fr["Sentiment News"]
     assert "alignés" in e_fr["Sintesi / Verdetto"]
 
 
