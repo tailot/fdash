@@ -7,6 +7,10 @@ import quant_engine as qe
 import volume_engine as ve
 from volume_engine import stima_buy_sell, verdetto_delta
 from heuristic_enrichment import genera_analisi_euristica
+from consensus_analytics import get_consensus_analytics
+from behavioral_finance import detect_volume_spike, detect_earnings_surprise, detect_insider_activity, get_behavioral_signals
+from advanced_nlp_sentiment import SentimentAnalyzer, analyze_sentiment, analyze_ticker_news
+from backtest_engine import run_walk_forward_test, calculate_confusion_matrix, run_stress_test
 from i18n import t, LANGUAGES
 
 
@@ -163,26 +167,109 @@ def test_i18n_translation_keys():
 
 def test_heuristic_enrichment_multilingual():
     e_en = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="en")
-    assert "Market sentiment on MSTR" in e_en["Sentiment News"]
+    assert "NLP Sentiment" in e_en["Sentiment News"]
     assert "aligned" in e_en["Sintesi / Verdetto"]
 
     e_it = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="it")
-    assert "Sentiment di mercato su MSTR" in e_it["Sentiment News"]
+    assert "Sentiment NLP" in e_it["Sentiment News"]
     assert "coerenti" in e_it["Sintesi / Verdetto"]
 
     e_es = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="es")
-    assert "Sentimiento de mercado para MSTR" in e_es["Sentiment News"]
+    assert "Sentimiento NLP" in e_es["Sentiment News"]
     assert "coherentes" in e_es["Sintesi / Verdetto"]
 
     e_zh = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="zh")
-    assert "MSTR 的市场情绪" in e_zh["Sentiment News"]
+    assert "NLP 新闻情绪" in e_zh["Sentiment News"]
     assert "一致" in e_zh["Sintesi / Verdetto"]
 
     e_fr = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="fr")
-    assert "Sentiment du marché sur MSTR" in e_fr["Sentiment News"]
+    assert "Sentiment NLP" in e_fr["Sentiment News"]
     assert "alignés" in e_fr["Sintesi / Verdetto"]
 
 
 def test_heuristic_enrichment_dati_mancanti():
     e = genera_analisi_euristica("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), lang="en")
     assert "unavailable" in e["Sentiment News"]
+
+
+# ------------------------------------------------------------------ Consensus Analytics
+def test_consensus_analytics():
+    res = get_consensus_analytics("AAPL", current_price=200.0)
+    assert res["ticker"] == "AAPL"
+    assert res["recommendation"] in ["Buy", "Strong Buy", "Hold", "Sell", "Underperform", "N/A"]
+    assert res["target_mean"] is not None
+    assert res["upside_pct"] == pytest.approx((res["target_mean"] - 200.0) / 200.0 * 100.0, abs=0.01)
+
+
+# ------------------------------------------------------------------ Behavioral Finance Signals
+def test_behavioral_finance_signals():
+    # Volume spike test
+    vol_normal = pd.Series([1000] * 30)
+    res_norm = detect_volume_spike(vol_normal)
+    assert not res_norm["is_spike"]
+    assert res_norm["signal"] == "NORMAL"
+
+    vol_spike = pd.Series([1000] * 29 + [5000])
+    prices = pd.Series([100] * 29 + [105])
+    res_spike = detect_volume_spike(vol_spike, prices)
+    assert res_spike["is_spike"]
+    assert res_spike["signal"] == "UNUSUAL_BUY_SPIKE"
+
+    # Earnings & Insider fallbacks
+    earn = detect_earnings_surprise("AAPL")
+    assert earn["signal"] in ["POSITIVE_SURPRISE", "NEGATIVE_SURPRISE", "NEUTRAL"]
+
+    insider = detect_insider_activity("AAPL")
+    assert insider["signal"] in ["BULLISH", "BEARISH", "NEUTRAL"]
+
+    # Combined behavioral
+    beh = get_behavioral_signals("AAPL", prices=prices, volumes=vol_spike)
+    assert beh["ticker"] == "AAPL"
+    assert "synthesis" in beh
+
+
+# ------------------------------------------------------------------ Advanced NLP Sentiment
+def test_advanced_nlp_sentiment():
+    analyzer = SentimentAnalyzer(use_finbert=False)  # Rule-based fallback testing
+    res_bull = analyzer.analyze("Company stock surges to record high after earnings beat!")
+    assert res_bull["sentiment_label"] == "BULLISH"
+    assert res_bull["sentiment_score"] > 0
+
+    res_bear = analyzer.analyze("Stock crashes as profits fall drastically and guidance downgraded.")
+    assert res_bear["sentiment_label"] == "BEARISH"
+    assert res_bear["sentiment_score"] < 0
+
+    ticker_news = analyze_ticker_news("AAPL", use_finbert=False)
+    assert ticker_news["ticker"] == "AAPL"
+    assert ticker_news["sentiment_label"] in ["BULLISH", "NEUTRAL", "BEARISH"]
+
+
+# ------------------------------------------------------------------ Backtesting & Validation
+def test_backtest_engine_walk_forward():
+    p = _prezzi(n=200)
+    wf_res = run_walk_forward_test(p, horizon=5, n_windows=3)
+    assert "period_results" in wf_res
+    assert len(wf_res["period_results"]) <= 3
+    assert "overall" in wf_res
+    ov = wf_res["overall"]
+    assert 0 <= ov["directional_accuracy"] <= 100.0
+
+
+def test_confusion_matrix_calculation():
+    pred_signals = ["BUY", "BUY", "SELL", "SELL", "EQUILIBRIUM", "BUY"]
+    actual_returns = [2.5, -1.0, -3.0, 0.2, 0.1, 4.0]
+    cm = calculate_confusion_matrix(pred_signals, actual_returns, ret_threshold=0.5)
+    assert "matrix_df" in cm
+    assert 0 <= cm["accuracy"] <= 100.0
+    assert 0 <= cm["buy_precision"] <= 100.0
+    assert 0 <= cm["buy_recall"] <= 100.0
+    assert 0 <= cm["buy_f1"] <= 100.0
+
+
+def test_stress_testing_simulations():
+    p = _prezzi(n=100)
+    st_res = run_stress_test(p, vol_multiplier=2.0, flash_crash_pct=-10.0)
+    assert "baseline_var_95" in st_res
+    assert "vol_spike_var_95" in st_res
+    assert st_res["vol_spike_var_95"] <= st_res["baseline_var_95"]
+    assert st_res["max_drawdown_stressed_pct"] < 0

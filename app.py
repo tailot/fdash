@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 from volume_engine import calcola_microstruttura_ticker
 from quant_engine import calcola_previsioni, carica_timesfm3, HORIZON, SOGLIA_TREND, MODELLO_FALLBACK
 from heuristic_enrichment import genera_analisi_euristica
+from backtest_engine import run_walk_forward_test, calculate_confusion_matrix, run_stress_test
 from i18n import t, LANGUAGES
 
 # Page config
@@ -87,10 +88,12 @@ if st.sidebar.button(t("run_analysis_button", lang_code), type="primary"):
 
 nat = st.session_state.get("nativo")
 
-# ---------------------------------------------------------------------------------------------- report
 if not nat:
     st.info(t("sidebar_prompt", lang_code))
     st.stop()
+
+# Streamlit Tabs
+tab_dash, tab_bt = st.tabs([t("tab_dashboard", lang_code), t("tab_backtest", lang_code)])
 
 df_quant = nat["quant"]
 df_vol = pd.DataFrame([{k: v for k, v in r.items()
@@ -100,29 +103,16 @@ df_vol = pd.DataFrame([{k: v for k, v in r.items()
 
 info = nat["info"]
 modello = df_quant["Modello"].iloc[0] if "Modello" in df_quant else ""
-st.caption(f"{t('universe_header', lang_code)}: {info['fonte']} · {len(df_quant)} stocks · {info['giorni']} days "
-           f"({info['dal']} → {info['al']}) · run {info['run_ts']} · model: {modello}")
-if modello == MODELLO_FALLBACK:
-    st.warning(t("fallback_warning", lang_code))
-if info["scartati"]:
-    st.caption(t("discarded_caption", lang_code).format(", ".join(info["scartati"][:40])))
-for e in nat["errori"]:
-    st.warning(t("volumes_not_available", lang_code).format(e))
 
 # outer join: a ticker without volume data stays in the report with missing values
 merged = pd.merge(df_quant, df_vol, on="Ticker", how="outer", suffixes=("", "_vol"))
 if "Ultimo_Prezzo_vol" in merged.columns:
     merged["Ultimo_Prezzo"] = merged["Ultimo_Prezzo"].fillna(merged["Ultimo_Prezzo_vol"])
-if merged.empty:
-    st.error(t("outer_join_no_data", lang_code))
-    st.stop()
 
 for col in ["Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%", "Data_Previsione", "P10", "Mediana", "P90",
             "Rend_Mediano_%", "Incertezza_Sigma_%", "Delta_Volumi_Intra", "%_Trader_In_Perdita"]:
     if col not in merged.columns:
         merged[col] = np.nan
-
-st.subheader(t("enrichment_subheader", lang_code))
 
 
 @st.cache_data(show_spinner=False)
@@ -139,20 +129,18 @@ righe_in = tuple(tuple(None if (isinstance(v, float) and np.isnan(v)) else v for
                  for row in merged[chiavi].itertuples(index=False, name=None))
 with st.spinner(t("enrichment_spinner", lang_code)):
     arr = _arricchisci(righe_in, lang_code)
+
 merged["Sentiment News"] = [a["Sentiment News"] for a in arr]
 merged["Sintesi / Verdetto"] = [a["Sintesi / Verdetto"] for a in arr]
+merged["Consensus_Rating"] = [a.get("Consensus_Rating", "N/A") for a in arr]
+merged["Target_Price"] = [a.get("Target_Price") for a in arr]
+merged["Upside_%"] = [a.get("Upside_%") for a in arr]
+merged["Behavioral_Signals"] = [a.get("Behavioral_Signals", "Normal") for a in arr]
 
 # Map terminology according to selected language
-buyer_maj_map = {
-    "PERDITA": t("loss", lang_code),
-    "GUADAGNO": t("profit", lang_code),
-    "MISTA": t("mixed", lang_code)
-}
-pos_va_map = {
-    "SOPRA": t("above", lang_code),
-    "SOTTO": t("below", lang_code),
-    "DENTRO": t("inside", lang_code)
-}
+buyer_maj_map = {"PERDITA": t("loss", lang_code), "GUADAGNO": t("profit", lang_code), "MISTA": t("mixed", lang_code)}
+pos_va_map = {"SOPRA": t("above", lang_code), "SOTTO": t("below", lang_code), "DENTRO": t("inside", lang_code)}
+
 if "Maggioranza_Acquirenti" in merged.columns:
     merged["Maggioranza_Acquirenti"] = merged["Maggioranza_Acquirenti"].map(lambda x: buyer_maj_map.get(x, x))
 if "Posizione_Area_Valore" in merged.columns:
@@ -183,99 +171,159 @@ renamed = merged.rename(columns={
     "VAH": t("col_vah", lang_code),
     "Sentiment News": t("col_sentiment", lang_code),
     "Sintesi / Verdetto": t("col_verdict", lang_code),
+    "Consensus_Rating": t("col_consensus", lang_code),
+    "Target_Price": t("col_target_price", lang_code),
+    "Upside_%": t("col_upside", lang_code),
+    "Behavioral_Signals": t("col_behavioral", lang_code),
 })
 
 colonne = ["Ticker", t("col_last_price", lang_code), t("col_trend", lang_code), t("col_sigma_pct", lang_code),
            t("col_forecast_date", lang_code), t("col_p10", lang_code), t("col_median", lang_code),
            t("col_p90", lang_code), t("col_med_ret_pct", lang_code), t("col_uncertainty_pct", lang_code),
            t("col_delta_vol", lang_code), t("col_verdict_vol", lang_code), t("col_loss_pct", lang_code),
-           t("col_buyer_majority", lang_code), t("col_pos_va", lang_code), t("col_poc", lang_code),
-           t("col_vwap", lang_code), t("col_val", lang_code), t("col_vah", lang_code),
-           t("col_sentiment", lang_code), t("col_verdict", lang_code)]
+           t("col_consensus", lang_code), t("col_target_price", lang_code), t("col_upside", lang_code),
+           t("col_behavioral", lang_code), t("col_sentiment", lang_code), t("col_verdict", lang_code)]
+
 final_df = renamed[[c for c in colonne if c in renamed.columns]]
 ret_col = t("col_med_ret_pct", lang_code)
 if ret_col in final_df:
     final_df = final_df.sort_values(ret_col, ascending=False, na_position="last").reset_index(drop=True)
 
-c1, c2, c3, c4 = st.columns(4)
-c1.metric(t("metric_analyzed", lang_code), len(final_df))
-trend_col = t("col_trend", lang_code)
-c2.metric(t("metric_buy_trend", lang_code), int((final_df[trend_col] == "BUY").sum()) if trend_col in final_df else 0)
-delta_col = t("col_delta_vol", lang_code)
-c3.metric(t("metric_avg_delta", lang_code), f"{final_df[delta_col].mean():.2f}%" if delta_col in final_df else "N/A")
-loss_col = t("col_loss_pct", lang_code)
-c4.metric(t("metric_avg_loss", lang_code), f"{final_df[loss_col].mean():.2f}%" if loss_col in final_df else "N/A")
+# ---------------------------------------------------------------- TAB 1: Dashboard & Reports
+with tab_dash:
+    st.caption(f"{t('universe_header', lang_code)}: {info['fonte']} · {len(df_quant)} stocks · {info['giorni']} days "
+               f"({info['dal']} → {info['al']}) · run {info['run_ts']} · model: {modello}")
+    if modello == MODELLO_FALLBACK:
+        st.warning(t("fallback_warning", lang_code))
+    if info["scartati"]:
+        st.caption(t("discarded_caption", lang_code).format(", ".join(info["scartati"][:40])))
+    for e in nat["errori"]:
+        st.warning(t("volumes_not_available", lang_code).format(e))
 
-st.subheader(t("report_table_subheader", lang_code))
-st.dataframe(final_df, width="stretch")
-st.download_button(t("download_csv_button", lang_code), final_df.to_csv(index=False).encode("utf-8"),
-                   file_name="report_finale_integrato.csv", mime="text/csv", type="primary")
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(t("metric_analyzed", lang_code), len(final_df))
+    trend_col = t("col_trend", lang_code)
+    c2.metric(t("metric_buy_trend", lang_code), int((final_df[trend_col] == "BUY").sum()) if trend_col in final_df else 0)
+    delta_col = t("col_delta_vol", lang_code)
+    c3.metric(t("metric_avg_delta", lang_code), f"{final_df[delta_col].mean():.2f}%" if delta_col in final_df else "N/A")
+    loss_col = t("col_loss_pct", lang_code)
+    c4.metric(t("metric_avg_loss", lang_code), f"{final_df[loss_col].mean():.2f}%" if loss_col in final_df else "N/A")
 
-st.subheader(t("charts_subheader", lang_code))
-g1, g2 = st.columns(2)
-with g1:
-    st.markdown(f"#### {t('chart_delta_title', lang_code)}")
-    fig1, ax1 = plt.subplots(figsize=(6, 4))
-    d = final_df[delta_col].fillna(0) if delta_col in final_df else pd.Series([0] * len(final_df))
-    ax1.bar(final_df["Ticker"], d, color=["#2e9e5b" if v >= 0 else "#d6453d" for v in d])
-    ax1.axhline(0, color="gray", ls="--", lw=0.8)
-    ax1.set_ylabel(t("chart_delta_ylabel", lang_code))
-    plt.setp(ax1.get_xticklabels(), rotation=90, fontsize=7)
-    st.pyplot(fig1)
-with g2:
-    st.markdown(f"#### {t('chart_loss_title', lang_code)}")
-    fig2, ax2 = plt.subplots(figsize=(6, 4))
-    p = final_df[loss_col].fillna(0) if loss_col in final_df else pd.Series([0] * len(final_df))
-    ax2.bar(final_df["Ticker"], p, color=["#d6453d" if v >= 60 else ("#2e9e5b" if v <= 40 else "#e08a00") for v in p])
-    ax2.axhline(60, color="#d6453d", ls=":", label=t("chart_loss_legend_loss", lang_code))
-    ax2.axhline(40, color="#2e9e5b", ls=":", label=t("chart_loss_legend_gain", lang_code))
-    ax2.set_ylabel(t("chart_loss_ylabel", lang_code))
-    ax2.legend(fontsize=7)
-    plt.setp(ax2.get_xticklabels(), rotation=90, fontsize=7)
-    st.pyplot(fig2)
+    st.subheader(t("report_table_subheader", lang_code))
+    st.dataframe(final_df, width="stretch")
+    st.download_button(t("download_csv_button", lang_code), final_df.to_csv(index=False).encode("utf-8"),
+                       file_name="report_finale_integrato.csv", mime="text/csv", type="primary")
 
-# Detail for ticker
-if nat and nat["vol"]:
-    st.subheader(t("detail_subheader", lang_code))
-    scelto = st.selectbox(t("select_ticker", lang_code), [r["Ticker"] for r in nat["vol"]])
-    r = next(x for x in nat["vol"] if x["Ticker"] == scelto)
-    if r["Avviso"]:
-        st.warning(r["Avviso"])
+    st.subheader(t("charts_subheader", lang_code))
+    g1, g2 = st.columns(2)
+    with g1:
+        st.markdown(f"#### {t('chart_delta_title', lang_code)}")
+        fig1, ax1 = plt.subplots(figsize=(6, 4))
+        d = final_df[delta_col].fillna(0) if delta_col in final_df else pd.Series([0] * len(final_df))
+        ax1.bar(final_df["Ticker"], d, color=["#2e9e5b" if v >= 0 else "#d6453d" for v in d])
+        ax1.axhline(0, color="gray", ls="--", lw=0.8)
+        ax1.set_ylabel(t("chart_delta_ylabel", lang_code))
+        plt.setp(ax1.get_xticklabels(), rotation=90, fontsize=7)
+        st.pyplot(fig1)
+    with g2:
+        st.markdown(f"#### {t('chart_loss_title', lang_code)}")
+        fig2, ax2 = plt.subplots(figsize=(6, 4))
+        p = final_df[loss_col].fillna(0) if loss_col in final_df else pd.Series([0] * len(final_df))
+        ax2.bar(final_df["Ticker"], p, color=["#d6453d" if v >= 60 else ("#2e9e5b" if v <= 40 else "#e08a00") for v in p])
+        ax2.axhline(60, color="#d6453d", ls=":", label=t("chart_loss_legend_loss", lang_code))
+        ax2.axhline(40, color="#2e9e5b", ls=":", label=t("chart_loss_legend_gain", lang_code))
+        ax2.set_ylabel(t("chart_loss_ylabel", lang_code))
+        ax2.legend(fontsize=7)
+        plt.setp(ax2.get_xticklabels(), rotation=90, fontsize=7)
+        st.pyplot(fig2)
 
-    v_verdict = t("buy", lang_code) if r['Verdetto_Volumi'] == "BUY" else (
-        t("sell", lang_code) if r['Verdetto_Volumi'] == "SELL" else t("equilibrium", lang_code)
-    )
-    b_maj = buyer_maj_map.get(r['Maggioranza_Acquirenti'], r['Maggioranza_Acquirenti'])
-    p_pos = pos_va_map.get(r['Posizione_Area_Valore'], r['Posizione_Area_Valore'])
+    # Detail for ticker
+    if nat and nat["vol"]:
+        st.subheader(t("detail_subheader", lang_code))
+        scelto = st.selectbox(t("select_ticker", lang_code), [r["Ticker"] for r in nat["vol"]])
+        r = next(x for x in nat["vol"] if x["Ticker"] == scelto)
+        if r["Avviso"]:
+            st.warning(r["Avviso"])
 
-    st.markdown(t("detail_summary", lang_code).format(
-        scelto, r['Prezzo_Riferimento'], nat['metodo'], r['Buy_%'], r['Sell_%'], r['Delta_Volumi_Intra'], v_verdict
-    ))
-    st.markdown(t("detail_vp_summary", lang_code).format(
-        r['POC'], r['VWAP'], r['VAL'], r['VAH'], r['%_Trader_In_Perdita'], r['%_Trader_In_Guadagno'], b_maj, p_pos
-    ))
-    if r["zona_sopra"]:
-        st.caption(t("resistance_caption", lang_code).format(r['zona_sopra']))
-    if r["zona_sotto"]:
-        st.caption(t("support_caption", lang_code).format(r['zona_sotto']))
+        v_verdict = t("buy", lang_code) if r['Verdetto_Volumi'] == "BUY" else (
+            t("sell", lang_code) if r['Verdetto_Volumi'] == "SELL" else t("equilibrium", lang_code)
+        )
+        b_maj = buyer_maj_map.get(r['Maggioranza_Acquirenti'], r['Maggioranza_Acquirenti'])
+        p_pos = pos_va_map.get(r['Posizione_Area_Valore'], r['Posizione_Area_Valore'])
 
-    vp = r["volume_profile"]
-    fig, ax = plt.subplots(figsize=(8, 5))
-    pa = r["Prezzo_Riferimento"]
-    ax.barh(vp["centri"], vp["profilo"], height=(vp["bins"][1] - vp["bins"][0]) * 0.95,
-            color=["#d6453d" if c > pa else "#2e9e5b" for c in vp["centri"]], edgecolor="white", linewidth=0.5)
-    ax.axhline(pa, color="black", lw=2, label=t("vp_chart_price", lang_code).format(pa))
-    ax.axhline(vp["poc"], color="#3b6fd6", ls="--", lw=1.5, label=t("vp_chart_poc", lang_code).format(vp['poc']))
-    ax.axhline(vp["vwap"], color="#e08a00", ls=":", lw=2, label=t("vp_chart_vwap", lang_code).format(vp['vwap']))
-    ax.axhspan(vp["val"], vp["vah"], color="gray", alpha=0.15, label=t("vp_chart_va", lang_code))
-    ax.set_title(t("vp_chart_title", lang_code))
-    ax.legend(loc="lower right", fontsize=8)
-    st.pyplot(fig)
+        st.markdown(t("detail_summary", lang_code).format(
+            scelto, r['Prezzo_Riferimento'], nat['metodo'], r['Buy_%'], r['Sell_%'], r['Delta_Volumi_Intra'], v_verdict
+        ))
+        st.markdown(t("detail_vp_summary", lang_code).format(
+            r['POC'], r['VWAP'], r['VAL'], r['VAH'], r['%_Trader_In_Perdita'], r['%_Trader_In_Guadagno'], b_maj, p_pos
+        ))
+        if r["zona_sopra"]:
+            st.caption(t("resistance_caption", lang_code).format(r['zona_sopra']))
+        if r["zona_sotto"]:
+            st.caption(t("support_caption", lang_code).format(r['zona_sotto']))
 
-    t1, t2 = st.columns(2)
-    t1.markdown(f"**{t('top5_zones_title', lang_code)}**")
-    t1.dataframe(r["zone_top5"].set_index("Zona di prezzo"), width="stretch")
-    t2.markdown(f"**{t('daily_breakdown_title', lang_code)}**")
-    t2.dataframe(r["dettaglio_giorni"], width="stretch")
+        vp = r["volume_profile"]
+        fig, ax = plt.subplots(figsize=(8, 5))
+        pa = r["Prezzo_Riferimento"]
+        ax.barh(vp["centri"], vp["profilo"], height=(vp["bins"][1] - vp["bins"][0]) * 0.95,
+                color=["#d6453d" if c > pa else "#2e9e5b" for c in vp["centri"]], edgecolor="white", linewidth=0.5)
+        ax.axhline(pa, color="black", lw=2, label=t("vp_chart_price", lang_code).format(pa))
+        ax.axhline(vp["poc"], color="#3b6fd6", ls="--", lw=1.5, label=t("vp_chart_poc", lang_code).format(vp['poc']))
+        ax.axhline(vp["vwap"], color="#e08a00", ls=":", lw=2, label=t("vp_chart_vwap", lang_code).format(vp['vwap']))
+        ax.axhspan(vp["val"], vp["vah"], color="gray", alpha=0.15, label=t("vp_chart_va", lang_code))
+        ax.set_title(t("vp_chart_title", lang_code))
+        ax.legend(loc="lower right", fontsize=8)
+        st.pyplot(fig)
+
+        t1, t2 = st.columns(2)
+        t1.markdown(f"**{t('top5_zones_title', lang_code)}**")
+        t1.dataframe(r["zone_top5"].set_index("Zona di prezzo"), width="stretch")
+        t2.markdown(f"**{t('daily_breakdown_title', lang_code)}**")
+        t2.dataframe(r["dettaglio_giorni"], width="stretch")
+
+# ---------------------------------------------------------------- TAB 2: Validation & Backtesting
+with tab_bt:
+    st.subheader(t("walk_forward_header", lang_code))
+    n_windows = st.slider(t("n_windows_slider", lang_code), 2, 6, 4)
+
+    # Generate/Run Walk-Forward backtesting on session prices
+    wf_results = run_walk_forward_test(prices_df=None, horizon=horizon, n_windows=n_windows)
+    overall = wf_results["overall"]
+
+    m1, m2, m3, m4, m5 = st.columns(5)
+    m1.metric(t("wf_acc", lang_code), f"{overall['directional_accuracy']:.1f}%")
+    m2.metric(t("wf_return", lang_code), f"{overall['strategy_return_pct']:+.1f}%")
+    m3.metric(t("wf_bench", lang_code), f"{overall['benchmark_return_pct']:+.1f}%")
+    m4.metric(t("wf_sharpe", lang_code), f"{overall['sharpe_ratio']:.2f}")
+    m5.metric(t("wf_max_dd", lang_code), f"{overall['max_drawdown_pct']:.1f}%")
+
+    st.subheader(t("confusion_matrix_header", lang_code))
+    pred_signals = wf_results.get("all_pred_signals", ["BUY", "BUY", "SELL", "SELL", "EQUILIBRIUM", "BUY"])
+    actual_returns = wf_results.get("all_actual_returns", [1.2, -0.5, -2.1, 0.4, 0.1, 3.2])
+    cm_results = calculate_confusion_matrix(pred_signals, actual_returns)
+
+    c_c1, c_c2 = st.columns([1, 1])
+    with c_c1:
+        st.dataframe(cm_results["matrix_df"], width="stretch")
+    with c_c2:
+        st.metric(t("cm_prec_buy", lang_code), f"{cm_results['buy_precision']:.1f}%")
+        st.metric(t("cm_rec_buy", lang_code), f"{cm_results['buy_recall']:.1f}%")
+        st.metric(t("cm_f1_buy", lang_code), f"{cm_results['buy_f1']:.1f}%")
+
+    st.subheader(t("stress_testing_header", lang_code))
+    s_col1, s_col2 = st.columns(2)
+    with s_col1:
+        vol_mult = st.slider(t("vol_mult_slider", lang_code), 1.0, 5.0, 2.5, step=0.5)
+    with s_col2:
+        flash_crash = st.slider(t("flash_crash_slider", lang_code), -20.0, 0.0, -8.0, step=1.0)
+
+    stress_res = run_stress_test(prices_df=None, vol_multiplier=vol_mult, flash_crash_pct=flash_crash)
+    st.info(stress_res["simulation_summary"])
+
+    s1, s2, s3, s4 = st.columns(4)
+    s1.metric(t("stress_baseline_var", lang_code), f"{stress_res['baseline_var_95']:.1f}%")
+    s2.metric(t("stress_vol_var", lang_code), f"{stress_res['vol_spike_var_95']:.1f}%")
+    s3.metric(t("stress_cvar", lang_code), f"{stress_res['vol_spike_cvar_95']:.1f}%")
+    s4.metric(t("stress_max_dd", lang_code), f"{stress_res['max_drawdown_stressed_pct']:.1f}%")
 
 st.caption(t("footer_disclaimer", lang_code))

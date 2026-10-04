@@ -7,11 +7,12 @@ Capabilities:
   3. Confidence scores and sentiment intensity
   4. Multi-language support
   5. Graceful degradation if transformers not available
+  6. Direct yfinance news headline scraping and sentiment scoring
 """
 import warnings
 import logging
-
 import numpy as np
+import yfinance as yf
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +21,7 @@ SENTIMENT_LEXICON = {
     "en": {
         "bullish": [
             "surge", "rally", "breakout", "bullish", "strength", "momentum", "outperform",
-            "upgrade", "beat", "exceed", "growth", "strong", "gain", "rally", "recovery",
+            "upgrade", "beat", "exceed", "growth", "strong", "gain", "recovery",
             "profit", "revenue", "earnings", "innovation", "expansion", "acquisition"
         ],
         "bearish": [
@@ -171,22 +172,18 @@ class SentimentAnalyzer:
         
         # Choose best result
         if finbert_score is not None and finbert_conf is not None and finbert_conf >= 0.6:
-            # FinBERT high confidence: use it
             sentiment_score = finbert_score
             confidence = finbert_conf
             method = "finbert"
         elif rule_conf > RULE_CONFIDENCE_THRESHOLD:
-            # Rules high confidence
             sentiment_score = rule_score
             confidence = rule_conf
             method = "rules"
         elif finbert_score is not None:
-            # FinBERT available but low confidence: use it anyway
             sentiment_score = finbert_score
             confidence = finbert_conf
             method = "finbert"
         else:
-            # Fallback to rules
             sentiment_score = rule_score
             confidence = rule_conf
             method = "rules"
@@ -229,3 +226,73 @@ def analyze_sentiment(text: str, lang: str = "en", use_finbert=True) -> dict:
     """Convenience function for one-off sentiment analysis."""
     analyzer = get_sentiment_analyzer(use_finbert)
     return analyzer.analyze(text, lang)
+
+
+def analyze_ticker_news(ticker_symbol: str, lang: str = "en", use_finbert=True) -> dict:
+    """
+    Fetches ticker news from yfinance and computes aggregate NLP news sentiment.
+    """
+    headlines = []
+    top_headline = None
+    try:
+        t_obj = yf.Ticker(ticker_symbol)
+        news_items = t_obj.news or []
+        for item in news_items:
+            # Handle dictionary formats
+            title = None
+            if isinstance(item, dict):
+                content = item.get("content")
+                if isinstance(content, dict):
+                    title = content.get("title")
+                if not title:
+                    title = item.get("title")
+            if title:
+                headlines.append(title)
+
+        if headlines:
+            top_headline = headlines[0]
+    except Exception as e:
+        logger.debug(f"News fetch failed for {ticker_symbol}: {e}")
+
+    if not headlines:
+        return {
+            "ticker": ticker_symbol,
+            "sentiment_label": "NEUTRAL",
+            "avg_score": 0.0,
+            "confidence": 0.0,
+            "method": "rules",
+            "headlines_count": 0,
+            "top_headline": None
+        }
+
+    analyzer = get_sentiment_analyzer(use_finbert)
+    scores = []
+    confidences = []
+    methods = []
+
+    for headline in headlines[:10]:  # Top 10 headlines
+        res = analyzer.analyze(headline, lang=lang)
+        scores.append(res["sentiment_score"])
+        confidences.append(res["confidence"])
+        methods.append(res["method"])
+
+    avg_score = float(np.mean(scores)) if scores else 0.0
+    avg_conf = float(np.mean(confidences)) if confidences else 0.0
+    primary_method = "finbert" if "finbert" in methods else "rules"
+
+    if abs(avg_score) <= NEUTRAL_ZONE:
+        label = "NEUTRAL"
+    elif avg_score > 0:
+        label = "BULLISH"
+    else:
+        label = "BEARISH"
+
+    return {
+        "ticker": ticker_symbol,
+        "sentiment_label": label,
+        "avg_score": round(avg_score, 2),
+        "confidence": round(avg_conf, 2),
+        "method": primary_method,
+        "headlines_count": len(headlines),
+        "top_headline": top_headline
+    }

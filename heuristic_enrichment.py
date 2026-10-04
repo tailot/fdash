@@ -1,4 +1,7 @@
 import math
+from advanced_nlp_sentiment import analyze_ticker_news
+from consensus_analytics import get_consensus_analytics
+from behavioral_finance import get_behavioral_signals
 
 LANG_NAMES = {
     "en": "English",
@@ -59,17 +62,41 @@ def _coerenza(trend: str, delta: float | None, lang: str = "en") -> str:
 
 def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: str, sigma_pct: float,
                              delta_volumi_intra, pct_trader_in_perdita,
-                             rend_mediano_pct=None, incertezza_pct=None, lang: str = "en") -> dict:
+                             rend_mediano_pct=None, incertezza_pct=None, lang: str = "en",
+                             consensus_data: dict = None, behavioral_data: dict = None,
+                             nlp_sentiment_data: dict = None) -> dict:
     """
-    Generates localized heuristic qualitative analysis for 'Sentiment News' and 'Sintesi / Verdetto'.
+    Generates localized heuristic qualitative analysis incorporating NLP news sentiment,
+    consensus analytics, and behavioral finance signals.
     """
     delta = _num(delta_volumi_intra)
     perd = _num(pct_trader_in_perdita)
     rend = _num(rend_mediano_pct)
     inc = _num(incertezza_pct)
 
+    # Fetch NLP sentiment if not provided
+    if nlp_sentiment_data is None:
+        nlp_sentiment_data = analyze_ticker_news(ticker, lang=lang)
+
+    # Fetch consensus data if not provided
+    if consensus_data is None:
+        consensus_data = get_consensus_analytics(ticker, current_price=_num(ultimo_prezzo))
+
+    # Fetch behavioral signals if not provided
+    if behavioral_data is None:
+        behavioral_data = get_behavioral_signals(ticker)
+
+    nlp_label = nlp_sentiment_data.get("sentiment_label", "NEUTRAL")
+    nlp_score = nlp_sentiment_data.get("avg_score", 0.0)
+    nlp_method = nlp_sentiment_data.get("method", "rules")
+    rec = consensus_data.get("recommendation", "N/A")
+    target_m = consensus_data.get("target_mean")
+    upside = consensus_data.get("upside_pct")
+    beh_synth = behavioral_data.get("synthesis", "Normal")
+
     if lang == "it":
-        sentiment = f"Sentiment di mercato su {ticker}: volatilità annualizzata {_fmt(_num(sigma_pct), '%')}."
+        sentiment = f"Sentiment NLP ({nlp_method.upper()}): {nlp_label} (punteggio: {nlp_score:+.2f}). "
+        sentiment += f"Volatilità annualizzata {_fmt(_num(sigma_pct), '%')}."
         if delta is None:
             sentiment += " Volumi intraday non disponibili."
         elif delta > 2.0:
@@ -79,27 +106,32 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         else:
             sentiment += " Volumi intraday in fase di equilibrio."
 
-        verdetto = f"Segnale del modello: {trend_timesfm}."
+        verdetto = f"Segnale modello: {trend_timesfm}."
         if rend is not None:
             verdetto += f" Rendimento mediano previsto {rend:+.2f}%."
         verdetto += _coerenza(trend_timesfm, delta, lang)
+        if target_m is not None and upside is not None:
+            verdetto += f" Consensus analisti: {rec} (Target: ${target_m:.2f}, upside {upside:+.1f}%)."
+        if beh_synth and beh_synth != "No Unusual Behavioral Anomaly":
+            verdetto += f" Segnali comportamentali: {beh_synth}."
         if perd is None:
             verdetto += " Volume Profile non disponibile."
         elif perd >= 60:
-            verdetto += f" La maggior parte degli acquirenti ({perd:.1f}% del volume) è IN PERDITA."
+            verdetto += f" Maggioranza acquirenti ({perd:.1f}% volume) IN PERDITA."
         elif perd <= 40:
-            verdetto += f" La maggior parte degli acquirenti è IN GUADAGNO ({100 - perd:.1f}%)."
+            verdetto += f" Maggioranza acquirenti IN GUADAGNO ({100 - perd:.1f}%)."
         else:
-            verdetto += " Situazione mista tra acquirenti in perdita e in guadagno."
+            verdetto += " Situazione mista acquirenti in perdita e guadagno."
 
     elif lang == "es":
-        sentiment = f"Sentimiento de mercado para {ticker}: volatilidad anualizada {_fmt(_num(sigma_pct), '%')}."
+        sentiment = f"Sentimiento NLP ({nlp_method.upper()}): {nlp_label} (puntuación: {nlp_score:+.2f}). "
+        sentiment += f"Volatilidad anualizada {_fmt(_num(sigma_pct), '%')}."
         if delta is None:
             sentiment += " Volúmenes intradía no disponibles."
         elif delta > 2.0:
-            sentiment += " Presión alcista en los volúmenes intradía."
+            sentiment += " Presión alcista en volúmenes intradía."
         elif delta < -2.0:
-            sentiment += " Predominio de volúmenes de venta en el intradía."
+            sentiment += " Predominio de ventas intradía."
         else:
             sentiment += " Volúmenes intradía en equilibrio."
 
@@ -107,23 +139,28 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         if rend is not None:
             verdetto += f" Rendimiento mediano previsto {rend:+.2f}%."
         verdetto += _coerenza(trend_timesfm, delta, lang)
+        if target_m is not None and upside is not None:
+            verdetto += f" Consenso analistas: {rec} (Objetivo: ${target_m:.2f}, upside {upside:+.1f}%)."
+        if beh_synth and beh_synth != "No Unusual Behavioral Anomaly":
+            verdetto += f" Señales de finanzas conductuales: {beh_synth}."
         if perd is None:
             verdetto += " Volume Profile no disponible."
         elif perd >= 60:
-            verdetto += f" La mayoría de los compradores ({perd:.1f}% del volumen) está EN PÉRDIDA."
+            verdetto += f" La mayoría ({perd:.1f}% del volumen) está EN PÉRDIDA."
         elif perd <= 40:
-            verdetto += f" La mayoría de los compradores está EN GANANCIA ({100 - perd:.1f}%)."
+            verdetto += f" La mayoría está EN GANANCIA ({100 - perd:.1f}%)."
         else:
-            verdetto += " Situación mixta entre compradores en pérdida y en ganancia."
+            verdetto += " Situación mixta entre compradores."
 
     elif lang == "zh":
-        sentiment = f"{ticker} 的市场情绪：年化波动率 {_fmt(_num(sigma_pct), '%')}。"
+        sentiment = f"NLP 新闻情绪 ({nlp_method.upper()}): {nlp_label} (得分: {nlp_score:+.2f})。"
+        sentiment += f"年化波动率 {_fmt(_num(sigma_pct), '%')}。"
         if delta is None:
             sentiment += " 日内成交量不可用。"
         elif delta > 2.0:
-            sentiment += " 日内买盘成交量存在上涨压力。"
+            sentiment += " 日内买盘存在上涨压力。"
         elif delta < -2.0:
-            sentiment += " 日内卖盘成交量占主导。"
+            sentiment += " 日内卖盘占主导。"
         else:
             sentiment += " 日内成交量处于平衡状态。"
 
@@ -131,17 +168,22 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         if rend is not None:
             verdetto += f" 预测中位数收益率 {rend:+.2f}%。"
         verdetto += _coerenza(trend_timesfm, delta, lang)
+        if target_m is not None and upside is not None:
+            verdetto += f" 分析师共识: {rec} (目标价: ${target_m:.2f}, 空间 {upside:+.1f}%)。"
+        if beh_synth and beh_synth != "No Unusual Behavioral Anomaly":
+            verdetto += f" 行为金融信号: {beh_synth}。"
         if perd is None:
             verdetto += " Volume Profile 不可用。"
         elif perd >= 60:
-            verdetto += f" 大多数买家 ({perd:.1f}% 的成交量) 处于亏损状态。"
+            verdetto += f" 大多数买家 ({perd:.1f}% 成交量) 处于亏损状态。"
         elif perd <= 40:
             verdetto += f" 大多数买家处于盈利状态 ({100 - perd:.1f}%)。"
         else:
             verdetto += " 处于亏损与盈利买家混合分布状态。"
 
     elif lang == "fr":
-        sentiment = f"Sentiment du marché sur {ticker}: volatilité annualisée {_fmt(_num(sigma_pct), '%')}."
+        sentiment = f"Sentiment NLP ({nlp_method.upper()}): {nlp_label} (score: {nlp_score:+.2f}). "
+        sentiment += f"Volatilité annualisée {_fmt(_num(sigma_pct), '%')}."
         if delta is None:
             sentiment += " Volumes intraday non disponibles."
         elif delta > 2.0:
@@ -155,17 +197,22 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         if rend is not None:
             verdetto += f" Rendement médian prévu {rend:+.2f}%."
         verdetto += _coerenza(trend_timesfm, delta, lang)
+        if target_m is not None and upside is not None:
+            verdetto += f" Consensus analystes: {rec} (Cible: ${target_m:.2f}, upside {upside:+.1f}%)."
+        if beh_synth and beh_synth != "No Unusual Behavioral Anomaly":
+            verdetto += f" Signaux de finance comportementale: {beh_synth}."
         if perd is None:
             verdetto += " Volume Profile non disponible."
         elif perd >= 60:
-            verdetto += f" La majorité des acheteurs ({perd:.1f}% du volume) est EN PERTE."
+            verdetto += f" La majorité ({perd:.1f}% du volume) est EN PERTE."
         elif perd <= 40:
-            verdetto += f" La majorité des acheteurs est EN GAIN ({100 - perd:.1f}%)."
+            verdetto += f" La majorité est EN GAIN ({100 - perd:.1f}%)."
         else:
-            verdetto += " Situation mixte entre acheteurs en perte et en gain."
+            verdetto += " Situation mixte entre acheteurs."
 
     else:  # "en" default
-        sentiment = f"Market sentiment on {ticker}: annualized volatility {_fmt(_num(sigma_pct), '%')}."
+        sentiment = f"NLP Sentiment ({nlp_method.upper()}): {nlp_label} (score: {nlp_score:+.2f}). "
+        sentiment += f"Annualized volatility {_fmt(_num(sigma_pct), '%')}."
         if delta is None:
             sentiment += " Intraday volume unavailable."
         elif delta > 2.0:
@@ -179,6 +226,10 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         if rend is not None:
             verdetto += f" Predicted median return {rend:+.2f}%."
         verdetto += _coerenza(trend_timesfm, delta, lang)
+        if target_m is not None and upside is not None:
+            verdetto += f" Analyst consensus: {rec} (Target: ${target_m:.2f}, upside {upside:+.1f}%)."
+        if beh_synth and beh_synth != "No Unusual Behavioral Anomaly":
+            verdetto += f" Behavioral finance signals: {beh_synth}."
         if perd is None:
             verdetto += " Volume Profile unavailable."
         elif perd >= 60:
@@ -188,4 +239,13 @@ def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: s
         else:
             verdetto += " Mixed distribution between buyers in loss and profit."
 
-    return {"Sentiment News": sentiment, "Sintesi / Verdetto": verdetto}
+    return {
+        "Sentiment News": sentiment,
+        "Sintesi / Verdetto": verdetto,
+        "Consensus_Rating": rec,
+        "Target_Price": target_m,
+        "Upside_%": upside,
+        "Behavioral_Signals": beh_synth,
+        "NLP_Sentiment_Label": nlp_label,
+        "NLP_Sentiment_Score": nlp_score
+    }
