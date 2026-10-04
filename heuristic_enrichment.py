@@ -70,10 +70,35 @@ def _build_advanced_sentiment(ticker: str, trend_timesfm: str, sigma_pct, delta_
         score = sentiment_data["sentiment_score"]
         confidence = sentiment_data["confidence"]
         method = sentiment_data["method"]
+
+        if lang == "it":
+            return (
+                f"Sentiment avanzato: {label} ({score:.2f}, confidenza={confidence:.2f}) tramite {method}."
+            )
+        if lang == "es":
+            return (
+                f"Sentimiento avanzado: {label} ({score:.2f}, confianza={confidence:.2f}) vía {method}."
+            )
+        if lang == "zh":
+            return (
+                f"高级情绪分析：{label} (得分: {score:.2f}, 置信度: {confidence:.2f})，方法: {method}。"
+            )
+        if lang == "fr":
+            return (
+                f"Sentiment avancé: {label} ({score:.2f}, confiance={confidence:.2f}) via {method}."
+            )
         return (
             f"Advanced sentiment: {label} ({score:.2f}, confidence={confidence:.2f}) via {method}."
         )
     except Exception as e:
+        if lang == "it":
+            return f"Sentiment avanzato: non disponibile ({type(e).__name__})."
+        if lang == "es":
+            return f"Sentimiento avanzado: no disponible ({type(e).__name__})."
+        if lang == "zh":
+            return f"高级情绪分析：不可用 ({type(e).__name__})。"
+        if lang == "fr":
+            return f"Sentiment avancé: non disponible ({type(e).__name__})."
         return f"Advanced sentiment: unavailable ({type(e).__name__})."
 
 
