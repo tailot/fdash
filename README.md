@@ -2,7 +2,7 @@
 
 Interactive web application built with **Python** and **Streamlit** that acts as a **Financial Analysis Master Dashboard**.
 
-The application **natively** calculates quantitative and volumetric metrics (including the TimesFM-3 multi-day quantile probabilistic forecast). It also uses the **Gemini 2.5 Flash** API (`gemini-2.5-flash`) to generate qualitative analyses on news sentiment and an integrated financial verdict.
+The application **natively** calculates quantitative and volumetric metrics (including the TimesFM-3 multi-day quantile probabilistic forecast) and enriches them with local heuristic qualitative analysis.
 
 ---
 
@@ -20,7 +20,7 @@ The native calculation includes:
    - 1-minute data (~8 days), 1-5 days, `DATA_FINE` (End Date), regular hours, `candela` (candle) / `clv` / `tick` methods, equilibrium threshold.
    - Volume Profile on typical price (H+L+C)/3: `% in loss/gain`, POC, VWAP, value area (VAL/VAH), most crowded zones above/below, top 5 zones, daily detail, conclusions (60% / 40% thresholds).
 3. **Data**: the dashboard calculates everything natively (no CSV loading or reading from folders).
-4. **Enrichment (Gemini 2.5 Flash or local heuristic)**: `News Sentiment` and `Summary / Verdict`, with the same analysis thresholds. Missing data are marked as "n/a", never filled with fictitious values. Note: Gemini does not have access to real-time news.
+4. **Local Heuristic Enrichment — `heuristic_enrichment.py`**: `News Sentiment` and `Summary / Verdict`, with defined rule thresholds. Missing data are marked as "N/A", never filled with fictitious values.
 5. **Report**: integrated table (*outer* join on `Ticker`), download `report_finale_integrato.csv`, comparative charts and, for native calculation, detail per ticker (Volume Profile, tables).
 
 > ⚠️ Note: buy/sell is an **estimation** from candles (not real order flow); "in loss/gain" considers only the volumes of the selected period; the "today's top N" universe has survivorship bias. This is not investment advice.
@@ -31,7 +31,6 @@ The native calculation includes:
 
 ### 1. Prerequisites
 - **Python 3.10+** installed on the system.
-- (Optional) Google Gemini API key to enable real-time AI analysis.
 
 ### 2. Installing Dependencies
 Clone or download the repository, then install the required packages:
@@ -84,10 +83,8 @@ You can run the application in an isolated and automated environment using **Doc
 
 ## ⚙️ Application Usage
 
-1. **Enter Gemini API Key (optional):**
-   - In the sidebar, enter your API key to use the `gemini-2.5-flash` model. If left empty, the app will generate a fallback integrated heuristic analysis.
-2. **Set parameters** in the sidebar: tickers (manual list or top N Nasdaq), horizon, buy/sell method, days, etc., then click **"Run Native Analysis"**.
-3. **Export the Report:**
+1. **Set parameters** in the sidebar: tickers (manual list or top N Nasdaq), horizon, buy/sell method, days, etc., then click **"Run Native Analysis"**.
+2. **Export the Report:**
    - Click the **"Download report_finale_integrato.csv"** button to export the integrated data.
 
 ---
@@ -109,7 +106,7 @@ pytest test_modules.py
 ├── app.py                   # Main Streamlit dashboard
 ├── quant_engine.py          # TimesFM-3 quantitative pipeline (universe, prices, log returns, quantiles)
 ├── volume_engine.py         # Volume pipeline (buy/sell, Volume Profile, value area)
-├── gemini_enrichment.py     # Gemini 2.5 Flash API integration
+├── heuristic_enrichment.py  # Local heuristic enrichment module
 ├── test_modules.py          # Unit test suite
 ├── requirements.txt         # Python dependencies
 ├── requirements-timesfm.txt # Optional dependencies for TimesFM-3

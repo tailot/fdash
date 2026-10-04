@@ -8,7 +8,6 @@ services:
       - hf_cache:/app/.cache/huggingface
     environment:
       - PYTHONUNBUFFERED=1
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
     restart: unless-stopped
 
 volumes:
