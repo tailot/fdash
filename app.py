@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 
 from volume_engine import calcola_microstruttura_ticker
 from quant_engine import calcola_previsioni, carica_timesfm3, HORIZON, SOGLIA_TREND, MODELLO_FALLBACK
-from gemini_enrichment import genera_analisi_gemini
+from heuristic_enrichment import genera_analisi_euristica
 from i18n import t, LANGUAGES
 
 # Page config
@@ -28,10 +28,6 @@ def get_forecaster():
 
 
 # ---------------------------------------------------------------------------------------------- sidebar
-api_key = st.sidebar.text_input(t("gemini_key_label", lang_code), type="password",
-                                value=os.environ.get("GEMINI_API_KEY", ""),
-                                help=t("gemini_key_help", lang_code))
-
 st.sidebar.subheader(t("universe_header", lang_code))
 universo_label = st.sidebar.radio(t("universe_radio", lang_code),
                                   [t("manual_list", lang_code), t("top_nasdaq", lang_code)], index=0)
@@ -130,10 +126,10 @@ st.subheader(t("enrichment_subheader", lang_code))
 
 
 @st.cache_data(show_spinner=False)
-def _arricchisci(righe: tuple, key: str, l_code: str):
+def _arricchisci(righe: tuple, l_code: str):
     out = []
     for r in righe:
-        out.append(genera_analisi_gemini(*r[:6], api_key=key, rend_mediano_pct=r[6], incertezza_pct=r[7], lang=l_code))
+        out.append(genera_analisi_euristica(*r[:6], rend_mediano_pct=r[6], incertezza_pct=r[7], lang=l_code))
     return out
 
 
@@ -142,7 +138,7 @@ chiavi = ["Ticker", "Ultimo_Prezzo", "Trend_TimesFM", "Sigma_%", "Delta_Volumi_I
 righe_in = tuple(tuple(None if (isinstance(v, float) and np.isnan(v)) else v for v in row)
                  for row in merged[chiavi].itertuples(index=False, name=None))
 with st.spinner(t("enrichment_spinner", lang_code)):
-    arr = _arricchisci(righe_in, api_key, lang_code)
+    arr = _arricchisci(righe_in, lang_code)
 merged["Sentiment News"] = [a["Sentiment News"] for a in arr]
 merged["Sintesi / Verdetto"] = [a["Sintesi / Verdetto"] for a in arr]
 

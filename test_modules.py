@@ -6,7 +6,7 @@ import pytest
 import quant_engine as qe
 import volume_engine as ve
 from volume_engine import stima_buy_sell, verdetto_delta
-from gemini_enrichment import genera_analisi_gemini
+from heuristic_enrichment import genera_analisi_euristica
 from i18n import t, LANGUAGES
 
 
@@ -153,7 +153,7 @@ def test_microstruttura_data_fine_e_prezzo_riferimento():
     assert str(r["dettaglio_giorni"].index[0]) == "2026-09-29"
 
 
-# ------------------------------------------------------------------ Gemini & Multilingual i18n
+# ------------------------------------------------------------------ Local Heuristic Enrichment & Multilingual i18n
 def test_i18n_translation_keys():
     assert len(LANGUAGES) == 5
     for code in ("en", "it", "es", "zh", "fr"):
@@ -161,28 +161,28 @@ def test_i18n_translation_keys():
         assert t("col_last_price", code) != ""
 
 
-def test_gemini_enrichment_multilingual_fallback():
-    e_en = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="en")
+def test_heuristic_enrichment_multilingual():
+    e_en = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="en")
     assert "Market sentiment on MSTR" in e_en["Sentiment News"]
     assert "aligned" in e_en["Sintesi / Verdetto"]
 
-    e_it = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="it")
+    e_it = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="it")
     assert "Sentiment di mercato su MSTR" in e_it["Sentiment News"]
     assert "coerenti" in e_it["Sintesi / Verdetto"]
 
-    e_es = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="es")
+    e_es = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="es")
     assert "Sentimiento de mercado para MSTR" in e_es["Sentiment News"]
     assert "coherentes" in e_es["Sintesi / Verdetto"]
 
-    e_zh = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="zh")
+    e_zh = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="zh")
     assert "MSTR 的市场情绪" in e_zh["Sentiment News"]
     assert "一致" in e_zh["Sintesi / Verdetto"]
 
-    e_fr = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="fr")
+    e_fr = genera_analisi_euristica("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, lang="fr")
     assert "Sentiment du marché sur MSTR" in e_fr["Sentiment News"]
     assert "alignés" in e_fr["Sintesi / Verdetto"]
 
 
-def test_gemini_enrichment_dati_mancanti():
-    e = genera_analisi_gemini("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), api_key="", lang="en")
+def test_heuristic_enrichment_dati_mancanti():
+    e = genera_analisi_euristica("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), lang="en")
     assert "unavailable" in e["Sentiment News"]

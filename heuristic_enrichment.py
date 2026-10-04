@@ -1,5 +1,3 @@
-import os
-import json
 import math
 
 LANG_NAMES = {
@@ -59,59 +57,17 @@ def _coerenza(trend: str, delta: float | None, lang: str = "en") -> str:
         return " Intraday volume in equilibrium, weak confirmation."
 
 
-def genera_analisi_gemini(ticker: str, ultimo_prezzo: float, trend_timesfm: str, sigma_pct: float,
-                          delta_volumi_intra, pct_trader_in_perdita, api_key: str = None,
-                          rend_mediano_pct=None, incertezza_pct=None, lang: str = "en") -> dict:
+def genera_analisi_euristica(ticker: str, ultimo_prezzo: float, trend_timesfm: str, sigma_pct: float,
+                             delta_volumi_intra, pct_trader_in_perdita,
+                             rend_mediano_pct=None, incertezza_pct=None, lang: str = "en") -> dict:
     """
-    Generates qualitative analysis for 'Sentiment News' and 'Sintesi / Verdetto'.
-    Uses Gemini API if available, otherwise falls back to localized heuristic analysis.
+    Generates localized heuristic qualitative analysis for 'Sentiment News' and 'Sintesi / Verdetto'.
     """
     delta = _num(delta_volumi_intra)
     perd = _num(pct_trader_in_perdita)
     rend = _num(rend_mediano_pct)
     inc = _num(incertezza_pct)
-    key = api_key or os.environ.get("GEMINI_API_KEY", "")
-    target_lang = LANG_NAMES.get(lang, "English")
 
-    if key and key.strip():
-        try:
-            from google import genai
-            client = genai.Client(api_key=key.strip())
-            prompt = f"""
-You are a senior quantitative financial analyst.
-Analyze the following ticker based on its metrics (N/A = missing data, do not invent it):
-
-Ticker: {ticker}
-Last Price: ${_fmt(_num(ultimo_prezzo))}
-Model Trend (5-day TimesFM-3 forecast): {trend_timesfm}
-Predicted Median Return: {_fmt(rend, '%')}
-Uncertainty (cumulative sigma): {_fmt(inc, '%')}
-Annualized Volatility: {_fmt(_num(sigma_pct), '%')}
-Intraday Volume Delta % (buy - sell): {_fmt(delta, '%')}
-% Volume in loss (Volume Profile): {_fmt(perd, '%')}
-
-Respond EXACTLY in JSON with keys "Sentiment_News" and "Sintesi_Verdetto":
-{{
-  "Sentiment_News": "<summary of sentiment>",
-  "Sintesi_Verdetto": "<concise verdict on consistency between forecast, intraday volume, and Volume Profile>"
-}}
-Respond in {target_lang} language in a professional, concise, and direct tone.
-"""
-            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
-            text = response.text.strip()
-            if "```json" in text:
-                text = text.split("```json")[1].split("```")[0].strip()
-            elif "```" in text:
-                text = text.split("```")[1].split("```")[0].strip()
-            res = json.loads(text)
-            return {
-                "Sentiment News": res.get("Sentiment_News", "Sentiment unavailable."),
-                "Sintesi / Verdetto": res.get("Sintesi_Verdetto", "Summary unavailable."),
-            }
-        except Exception:
-            pass  # Fallback to local heuristic
-
-    # Local Heuristic Fallback
     if lang == "it":
         sentiment = f"Sentiment di mercato su {ticker}: volatilità annualizzata {_fmt(_num(sigma_pct), '%')}."
         if delta is None:
