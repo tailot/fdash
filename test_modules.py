@@ -1,4 +1,4 @@
-"""Test offline: nessun accesso di rete (yfinance e forecaster sono sostituiti da dati sintetici)."""
+"""Offline test suite: no network access (yfinance and forecaster are mocked with synthetic data)."""
 import numpy as np
 import pandas as pd
 import pytest
@@ -7,9 +7,10 @@ import quant_engine as qe
 import volume_engine as ve
 from volume_engine import stima_buy_sell, verdetto_delta
 from gemini_enrichment import genera_analisi_gemini
+from i18n import t, LANGUAGES
 
 
-# ------------------------------------------------------------------ dati sintetici
+# ------------------------------------------------------------------ synthetic data
 def _prezzi(n=400, tickers=("AAA", "BBB", "CCC"), seed=0):
     rng = np.random.default_rng(seed)
     idx = pd.bdate_range("2025-01-01", periods=n)
@@ -35,20 +36,20 @@ class FakeOut:
 
 
 class FakeTimesFM:
-    """Simula TimesFM-3: decili crescenti con mediana = +0.2% per passo e ampiezza nota."""
+    """Simulates TimesFM-3: increasing deciles with median = +0.2% per step and known dispersion."""
     def predict_batch(self, series, horizon, return_quantiles, use_symmetric_averaging):
         assert return_quantiles
         z = np.array([-1.2815515655446004, -0.8416, -0.5244, -0.2533, 0, 0.2533, 0.5244, 0.8416, 1.2815515655446004])
-        q = 0.002 + 0.01 * z                                   # sigma per passo = 0.01
+        q = 0.002 + 0.01 * z                                   # step sigma = 0.01
         return [FakeOut(np.tile(q, (horizon, 1))) for _ in series]
 
 
-# ------------------------------------------------------------------ quant: formule
+# ------------------------------------------------------------------ quant: formulas
 def test_cum_stats():
     med = np.full((1, 5), 0.002)
     q10, q90 = med - 0.01 * qe.Z80, med + 0.01 * qe.Z80
     mu, sg = qe._cum_stats(med, q10, q90)
-    assert mu[0, -1] == pytest.approx(0.01)                     # cumsum della mediana
+    assert mu[0, -1] == pytest.approx(0.01)                     # cumsum of median
     assert sg[0, -1] == pytest.approx(0.01 * np.sqrt(5))       # sqrt(cumsum(sigma^2))
 
 
@@ -71,7 +72,7 @@ def test_tabella_previsioni_timesfm():
     assert r["Rend_Mediano_%"] == pytest.approx((np.exp(0.01) - 1) * 100, abs=0.01)
     assert r["Incertezza_Sigma_%"] == pytest.approx(sg * 100, abs=0.01)
     assert r["Modello"] == qe.MODELLO_TFM3
-    assert r["Trend_TimesFM"] == "BUY"                          # z = 0.01 / 0.0224 = 0.45 > soglia
+    assert r["Trend_TimesFM"] == "BUY"                          # z = 0.01 / 0.0224 = 0.45 > threshold
     assert pd.Timestamp(r["Data_Previsione"]) == pd.bdate_range(p.index[-1] + pd.Timedelta(days=1), periods=5)[-1]
 
 
@@ -91,7 +92,7 @@ def test_ordinamento_per_rendimento_mediano():
 def test_prepara_prezzi_scarta_storico_incompleto():
     p = _prezzi(tickers=("AAA", "BBB"))
     p["NEW"] = np.nan
-    p.loc[p.index[-50:], "NEW"] = 10.0                          # quotato da poco
+    p.loc[p.index[-50:], "NEW"] = 10.0                          # Recently listed
     prices, scartati = qe.prepara_prezzi(p, ["AAA", "NEW", "BBB"], 10)
     assert list(prices.columns) == ["AAA", "BBB"] and scartati == ["NEW"]
 
@@ -106,12 +107,12 @@ def test_calcola_previsioni_pipeline(monkeypatch):
     p = _prezzi(tickers=("AAA", "BBB", "CCC"))
     monkeypatch.setattr(qe, "scarica_prezzi", lambda cand, n, h: (p[cand], []))
     df, info = qe.calcola_previsioni(["AAA", "BBB", "CCC"], forecaster=FakeTimesFM())
-    assert set(df["Ticker"]) == {"AAA", "BBB", "CCC"} and info["fonte"] == "lista manuale"
+    assert set(df["Ticker"]) == {"AAA", "BBB", "CCC"} and info["fonte"] == "manual list"
     one = qe.calcola_quant_trend_ticker("AAA", forecaster=FakeTimesFM())
     assert one["Ticker"] == "AAA" and "P10" in one
 
 
-# ------------------------------------------------------------------ volumi: formule
+# ------------------------------------------------------------------ volume: formulas
 def test_stima_buy_sell():
     df = pd.DataFrame({"Open": [100.0, 102.0, 101.0], "High": [103.0, 104.0, 102.0],
                        "Low": [99.0, 100.0, 100.0], "Close": [102.0, 101.0, 101.0], "Volume": [1000, 2000, 1500]})
@@ -142,22 +143,46 @@ def test_microstruttura_completa():
 
 def test_microstruttura_avviso_giorni_insufficienti():
     r = ve.calcola_microstruttura_ticker("zzz", giorni=5, raw=_minuti(2))
-    assert r["Giorni_Analizzati"] == 2 and "disponibili solo 2 giorni su 5" in r["Avviso"]
+    assert r["Giorni_Analizzati"] == 2 and "only 2 days available" in r["Avviso"]
 
 
 def test_microstruttura_data_fine_e_prezzo_riferimento():
     raw = _minuti(3)
     r = ve.calcola_microstruttura_ticker("zzz", giorni=1, data_fine="2026-09-29", prezzo_riferimento=1e9, raw=raw)
-    assert r["%_Trader_In_Guadagno"] == pytest.approx(100.0)    # tutto il volume e' sotto il prezzo simulato
+    assert r["%_Trader_In_Guadagno"] == pytest.approx(100.0)    # All volume is below simulated price
     assert str(r["dettaglio_giorni"].index[0]) == "2026-09-29"
 
 
-# ------------------------------------------------------------------ Gemini (fallback)
-def test_gemini_enrichment_fallback():
-    e = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="")
-    assert "MSTR" in e["Sentiment News"] and "coerenti" in e["Sintesi / Verdetto"]
+# ------------------------------------------------------------------ Gemini & Multilingual i18n
+def test_i18n_translation_keys():
+    assert len(LANGUAGES) == 5
+    for code in ("en", "it", "es", "zh", "fr"):
+        assert t("app_title", code) != ""
+        assert t("col_last_price", code) != ""
+
+
+def test_gemini_enrichment_multilingual_fallback():
+    e_en = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="en")
+    assert "Market sentiment on MSTR" in e_en["Sentiment News"]
+    assert "aligned" in e_en["Sintesi / Verdetto"]
+
+    e_it = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="it")
+    assert "Sentiment di mercato su MSTR" in e_it["Sentiment News"]
+    assert "coerenti" in e_it["Sintesi / Verdetto"]
+
+    e_es = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="es")
+    assert "Sentimiento de mercado para MSTR" in e_es["Sentiment News"]
+    assert "coherentes" in e_es["Sintesi / Verdetto"]
+
+    e_zh = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="zh")
+    assert "MSTR 的市场情绪" in e_zh["Sentiment News"]
+    assert "一致" in e_zh["Sintesi / Verdetto"]
+
+    e_fr = genera_analisi_gemini("MSTR", 160.01, "BUY", 10.44, 9.79, 59.9, api_key="", lang="fr")
+    assert "Sentiment du marché sur MSTR" in e_fr["Sentiment News"]
+    assert "alignés" in e_fr["Sintesi / Verdetto"]
 
 
 def test_gemini_enrichment_dati_mancanti():
-    e = genera_analisi_gemini("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), api_key="")
-    assert "non disponibili" in e["Sentiment News"] and "n/d" in e["Sentiment News"]
+    e = genera_analisi_gemini("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), api_key="", lang="en")
+    assert "unavailable" in e["Sentiment News"]
