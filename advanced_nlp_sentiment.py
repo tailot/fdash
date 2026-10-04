@@ -79,6 +79,23 @@ RULE_CONFIDENCE_THRESHOLD = 0.5
 NEUTRAL_ZONE = 0.1
 
 
+def _patch_transformers_dummy_modules():
+    import sys
+    for name, m in list(sys.modules.items()):
+        if name.startswith("transformers.") and hasattr(m, "__getattr__"):
+            orig_getattr = m.__getattr__
+            if getattr(orig_getattr, "_is_safe", False):
+                continue
+            def make_safe_getattr(og, mod_name):
+                def safe_getattr(attr):
+                    if attr.startswith("__"):
+                        raise AttributeError(f"module {mod_name} has no attribute {attr}")
+                    return og(attr)
+                safe_getattr._is_safe = True
+                return safe_getattr
+            m.__getattr__ = make_safe_getattr(orig_getattr, name)
+
+
 class SentimentAnalyzer:
     def __init__(self, use_finbert=True, cache_size=500):
         self.use_finbert = use_finbert
@@ -94,6 +111,8 @@ class SentimentAnalyzer:
         try:
             from transformers import AutoModelForSequenceClassification, AutoTokenizer
             import torch
+
+            _patch_transformers_dummy_modules()
 
             model_name = "ProsusAI/finbert"
             self.finbert_tokenizer = AutoTokenizer.from_pretrained(model_name)
