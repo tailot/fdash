@@ -186,3 +186,11 @@ def test_heuristic_enrichment_multilingual():
 def test_heuristic_enrichment_dati_mancanti():
     e = genera_analisi_euristica("MSTR", 160.01, "BUY", float("nan"), None, float("nan"), lang="en")
     assert "unavailable" in e["Sentiment News"]
+
+
+def test_sentiment_analysis():
+    from advanced_nlp_sentiment import SentimentAnalyzer
+    analyzer = SentimentAnalyzer(use_finbert=False)
+    res_bull = analyzer.analyze("Company reports record revenue and strong growth rally", lang="en")
+    assert res_bull["sentiment_label"] == "BULLISH"
+    assert "sentiment_score" in res_bull
