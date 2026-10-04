@@ -1,16 +1,16 @@
 """
-Motore quantitativo: pipeline per la previsione quantilica dei prezzi.
+Quantitative Engine: Pipeline for quantile price forecasting.
 
-Logica di calcolo:
-  * prezzi aggiustati (auto_adjust=True), storico 5y, calendario comune, buchi isolati riempiti
-  * TimesFM-3 applicato ai RENDIMENTI LOG (ultimi CONTEXT_LEN giorni), non ai prezzi
-  * decili del modello -> mediana (decile 0.5), P10 (0.1), P90 (0.9)
-  * sigma per passo = (P90 - P10) / (2 * Z80); sigma cumulata = sqrt(cumsum(sigma^2))
-  * prezzo previsto = ultimo * exp(mu_cum -/+ Z80 * sigma_cum)
-  * universo = titoli NASDAQ per market cap decrescente (screener Nasdaq, fallback Wikipedia)
+Calculation logic:
+  * Adjusted prices (auto_adjust=True), 5y history, common calendar, isolated gaps filled
+  * TimesFM-3 applied to LOG RETURNS (last CONTEXT_LEN days), not to prices
+  * Model deciles -> median (decile 0.5), P10 (0.1), P90 (0.9)
+  * Step sigma = (P90 - P10) / (2 * Z80); cumulative sigma = sqrt(cumsum(sigma^2))
+  * Predicted price = last * exp(mu_cum -/+ Z80 * sigma_cum)
+  * Universe = NASDAQ stocks by descending market cap (Nasdaq screener, Wikipedia fallback)
 
-Se `timesfm3` non e' installato il motore NON inventa un trend: usa la baseline
-"Naive (0%)" (mediana 0) con sigma storica, e lo dichiara nella colonna `Modello`.
+If `timesfm3` is not installed, the engine does NOT fabricate a trend: it uses the
+"Naive (0%)" baseline (median 0) with historical sigma, declared in the `Modello` column.
 """
 import io
 import warnings
@@ -21,14 +21,14 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-Z80 = 1.2815515655446004          # quantile 90% della normale standard
-CONTEXT_LEN = 1024                # giorni di rendimenti in input al modello
+Z80 = 1.2815515655446004          # 90th percentile of standard normal
+CONTEXT_LEN = 1024                # Days of log returns input to the model
 HISTORY = "5y"
 HORIZON = 5
-SOGLIA_TREND = 0.10               # NOTA: specifica della dashboard, vedi _trend_da_previsione
+SOGLIA_TREND = 0.10               # NOTE: dashboard specification, see _trend_da_previsione
 
 MODELLO_TFM3 = "TimesFM-3"
-MODELLO_FALLBACK = "Naive (0%) - TimesFM-3 non installato"
+MODELLO_FALLBACK = "Naive (0%) - TimesFM-3 not installed"
 
 UA = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
       "Accept": "application/json, text/plain, */*"}
@@ -36,7 +36,7 @@ SHARE_CLASS_DUPES = {"GOOG": "GOOGL", "FOX": "FOXA", "NWS": "NWSA"}
 
 
 # ----------------------------------------------------------------------------------------------
-# Universo
+# Universe
 # ----------------------------------------------------------------------------------------------
 def _clean_universe(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -73,29 +73,29 @@ def universe_wikipedia() -> pd.DataFrame:
 
 
 def ricava_universo(n_tickers: int = 100, buffer: int = 20, tickers_manuali=None):
-    """Ritorna (DataFrame Ticker/MarketCap, fonte, lista candidati)."""
+    """Returns (DataFrame Ticker/MarketCap, source_name, candidate_list)."""
     if tickers_manuali:
         uni = pd.DataFrame({"Ticker": [t.strip().upper() for t in tickers_manuali], "MarketCap": np.nan})
-        return uni, "lista manuale", uni["Ticker"].tolist()
+        return uni, "manual list", uni["Ticker"].tolist()
     uni, fonte = None, None
-    for nome, fn in [("screener Nasdaq", universe_nasdaq_api), ("Wikipedia Nasdaq-100", universe_wikipedia)]:
+    for nome, fn in [("Nasdaq screener", universe_nasdaq_api), ("Wikipedia Nasdaq-100", universe_wikipedia)]:
         try:
             uni = fn()
             fonte = nome
             if len(uni) >= 30:
                 break
-        except Exception as e:  # noqa: BLE001 - si passa alla fonte successiva
-            warnings.warn(f"{nome}: non disponibile ({type(e).__name__}: {e})")
+        except Exception as e:  # noqa: BLE001 - proceed to next source
+            warnings.warn(f"{nome}: unavailable ({type(e).__name__}: {e})")
     if uni is None or len(uni) < 30:
-        raise RuntimeError("Universo non ricavato: usa una lista manuale di ticker.")
+        raise RuntimeError("Universe could not be retrieved: please use a manual ticker list.")
     return uni, fonte, uni.head(n_tickers + buffer)["Ticker"].tolist()
 
 
 # ----------------------------------------------------------------------------------------------
-# Prezzi (calendario comune)
+# Prices (common calendar)
 # ----------------------------------------------------------------------------------------------
 def prepara_prezzi(raw: pd.DataFrame, cand: list, n_tickers: int):
-    """Allineamento prezzi: tiene titoli con storico ~completo, ffill, dropna. Ritorna (prices, scartati)."""
+    """Price alignment: keeps stocks with ~complete history, ffill, dropna. Returns (prices, discarded)."""
     raw = raw.copy()
     raw.index = pd.to_datetime(raw.index).tz_localize(None)
     raw = raw.dropna(axis=1, thresh=int(0.99 * len(raw)))
@@ -107,13 +107,13 @@ def prepara_prezzi(raw: pd.DataFrame, cand: list, n_tickers: int):
 
 def scarica_prezzi(cand: list, n_tickers: int, history: str = HISTORY):
     raw = yf.download(cand, period=history, auto_adjust=True, progress=False, threads=True)["Close"]
-    if isinstance(raw, pd.Series):          # un solo ticker
+    if isinstance(raw, pd.Series):          # single ticker
         raw = raw.to_frame(cand[0])
     return prepara_prezzi(raw, cand, n_tickers)
 
 
 # ----------------------------------------------------------------------------------------------
-# Modello
+# Model
 # ----------------------------------------------------------------------------------------------
 def _cum_stats(med, q10, q90):
     sig = (q90 - q10) / (2 * Z80)
@@ -125,7 +125,7 @@ def _log_returns(price_arrays, context_len=CONTEXT_LEN):
 
 
 def carica_timesfm3(per_core_batch_size: int = 32):
-    """Carica TimesFM-3. Ritorna il forecaster oppure None se il pacchetto non c'e'."""
+    """Loads TimesFM-3. Returns the forecaster or None if the package is not installed."""
     try:
         import torch
         from timesfm3 import TimesFM3Evaluator, ModelConfig
@@ -139,17 +139,17 @@ def carica_timesfm3(per_core_batch_size: int = 32):
 
 
 def tfm3_returns(forecaster, price_arrays, horizon, use_symmetric_averaging=False, context_len=CONTEXT_LEN):
-    """TimesFM-3: rendimento log cumulato (mediana) e sigma cumulata per i passi 1..horizon."""
+    """TimesFM-3: cumulative log return (median) and cumulative sigma for steps 1..horizon."""
     outs = list(forecaster.predict_batch(_log_returns(price_arrays, context_len), horizon=horizon,
                                          return_quantiles=True,
                                          use_symmetric_averaging=use_symmetric_averaging))
-    q = np.stack([np.asarray(o.quantiles) for o in outs])          # (n, horizon, 9): decili 0.1 ... 0.9
-    assert q.shape[1:] == (horizon, 9), f"forma inattesa dei quantili: {q.shape}"
-    return _cum_stats(q[:, :, 4], q[:, :, 0], q[:, :, 8])          # mediana = decile 0.5, P10, P90
+    q = np.stack([np.asarray(o.quantiles) for o in outs])          # (n, horizon, 9): deciles 0.1 ... 0.9
+    assert q.shape[1:] == (horizon, 9), f"unexpected quantiles shape: {q.shape}"
+    return _cum_stats(q[:, :, 4], q[:, :, 0], q[:, :, 8])          # median = decile 0.5, P10, P90
 
 
 def naive_returns(price_arrays, horizon, context_len=CONTEXT_LEN):
-    """Baseline 'Naive (0%)' con sigma storica: mediana 0, intervallo simmetrico."""
+    """'Naive (0%)' baseline with historical sigma: median 0, symmetric interval."""
     mu = np.zeros((len(price_arrays), horizon))
     sg_step = np.array([np.std(r[-252:], ddof=1) if len(r) > 2 else 0.02
                         for r in _log_returns(price_arrays, context_len)])
@@ -159,7 +159,7 @@ def naive_returns(price_arrays, horizon, context_len=CONTEXT_LEN):
 
 
 def _trend_da_previsione(mu: float, sg: float, soglia: float = SOGLIA_TREND) -> str:
-    """Trend dalla previsione: BUY/SELL se la mediana si sposta di almeno `soglia` x sigma cumulata."""
+    """Trend from forecast: BUY/SELL if median shifts by at least `soglia` x cumulative sigma."""
     if sg <= 0:
         return "EQUILIBRIO"
     z = mu / sg
@@ -171,7 +171,7 @@ def _trend_da_previsione(mu: float, sg: float, soglia: float = SOGLIA_TREND) -> 
 
 
 # ----------------------------------------------------------------------------------------------
-# Previsione finale (una riga per titolo)
+# Final forecast (one row per stock)
 # ----------------------------------------------------------------------------------------------
 def tabella_previsioni(prices: pd.DataFrame, horizon: int = HORIZON, forecaster=None, mc_map=None,
                        use_symmetric_averaging: bool = False, soglia_trend: float = SOGLIA_TREND) -> pd.DataFrame:
@@ -184,7 +184,7 @@ def tabella_previsioni(prices: pd.DataFrame, horizon: int = HORIZON, forecaster=
         cum_mu, cum_sig = naive_returns(arrays, horizon)
         modello = MODELLO_FALLBACK
 
-    end_date = pd.bdate_range(prices.index[-1] + pd.Timedelta(days=1), periods=horizon)[-1]  # non considera le festivita'
+    end_date = pd.bdate_range(prices.index[-1] + pd.Timedelta(days=1), periods=horizon)[-1]  # ignores holidays
     mc_map = mc_map or {}
     rows = []
     for i, t in enumerate(tickers):
@@ -214,16 +214,16 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
                        horizon: int = HORIZON, forecaster=None, use_symmetric_averaging: bool = False,
                        soglia_trend: float = SOGLIA_TREND, min_tickers: int = 20):
     """
-    Pipeline completa di previsione. `tickers=None` -> universo automatico (top n_tickers NASDAQ per market cap).
-    Ritorna (df_previsioni, info) con info = {fonte, scartati, giorni, dal, al, run_ts}.
+    Complete forecast pipeline. `tickers=None` -> automatic universe (top n_tickers NASDAQ by market cap).
+    Returns (df_previsioni, info) with info = {fonte, scartati, giorni, dal, al, run_ts}.
     """
     uni, fonte, cand = ricava_universo(n_tickers, buffer, tickers)
     n_target = len(cand) if tickers else n_tickers
     prices, scartati = scarica_prezzi(cand, n_target, history)
     if tickers is None and len(prices.columns) < min_tickers:
-        raise RuntimeError("Troppi pochi titoli con dati completi.")
+        raise RuntimeError("Too few stocks with complete history.")
     if prices.shape[1] == 0:
-        raise ValueError("Nessun titolo con dati sufficienti.")
+        raise ValueError("No stock with sufficient data.")
     mc_map = dict(zip(uni["Ticker"], uni["MarketCap"]))
     df = tabella_previsioni(prices, horizon, forecaster, mc_map, use_symmetric_averaging, soglia_trend)
     info = {"fonte": fonte, "scartati": scartati, "giorni": len(prices),
@@ -233,6 +233,6 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
 
 
 def calcola_quant_trend_ticker(ticker: str, period: str = HISTORY, horizon: int = HORIZON, forecaster=None) -> dict:
-    """Compatibilita' con la vecchia API: previsione per un solo ticker."""
+    """Compatibility with legacy API: forecast for a single ticker."""
     df, _ = calcola_previsioni([ticker], history=period, horizon=horizon, forecaster=forecaster)
     return df.iloc[0].to_dict()

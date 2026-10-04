@@ -1,11 +1,11 @@
 """
-Motore volumi: analisi di microstruttura dei volumi intraday.
+Volume Engine: Intraday volume microstructure analysis.
 
-Logica di calcolo:
-  * dati a 1 minuto (Yahoo: ~8 giorni), solo orari regolari, volume > 0
-  * stima buy/sell con 3 metodi (candela / clv / tick) e verdetto con soglia di equilibrio
-  * Volume Profile sul prezzo tipico (H+L+C)/3: % in perdita / guadagno, POC, VWAP, area di valore (VAL/VAH)
-  * zone piu' affollate sopra/sotto il prezzo, top 5 zone, dettaglio per giorno, conclusioni testuali
+Calculation logic:
+  * 1-minute data (Yahoo: ~8 days), regular market hours only, volume > 0
+  * Buy/sell estimation using 3 methods (candle / clv / tick) and verdict with equilibrium threshold
+  * Volume Profile on typical price (H+L+C)/3: % in loss / profit, POC, VWAP, Value Area (VAL/VAH)
+  * Most active zones above/below price, top 5 zones, daily breakdown, textual conclusions
 """
 import numpy as np
 import pandas as pd
@@ -26,7 +26,7 @@ def stima_buy_sell(df: pd.DataFrame, metodo: str = "clv") -> pd.DataFrame:
         segno = np.sign(d["Close"].diff()).replace(0, np.nan).ffill().fillna(0)
         buy_share = np.where(segno > 0, 1.0, np.where(segno < 0, 0.0, 0.5))
     else:
-        raise ValueError(f"Metodo non valido: {metodo}")
+        raise ValueError(f"Invalid method: {metodo}")
     d["buy"] = v * buy_share
     d["sell"] = v * (1 - buy_share)
     d["delta"] = d["buy"] - d["sell"]
@@ -45,12 +45,12 @@ def scarica_minuti(ticker: str, solo_orari_regolari: bool = True) -> pd.DataFram
     raw = yf.download(ticker, period="8d", interval="1m", prepost=not solo_orari_regolari,
                       auto_adjust=False, progress=False)
     if raw.empty:
-        raise ValueError(f"Nessun dato scaricato per il ticker '{ticker}'. Verifica il simbolo.")
+        raise ValueError(f"No data downloaded for ticker '{ticker}'. Please check the symbol.")
     return raw
 
 
 def prepara_minuti(raw: pd.DataFrame, giorni: int = 1, data_fine: str = ""):
-    """Pulizia e selezione degli ultimi `giorni`. Ritorna (df, lista_giorni, avviso)."""
+    """Cleaning and selection of the last `giorni` days. Returns (df, selected_days, warning)."""
     df = raw.copy()
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -64,15 +64,15 @@ def prepara_minuti(raw: pd.DataFrame, giorni: int = 1, data_fine: str = ""):
         disponibili = [g for g in disponibili if g <= limite]
     scelti = disponibili[-giorni:]
     if not scelti:
-        raise ValueError("Nessun giorno disponibile per la data scelta (i dati a 1 minuto coprono solo ~8 giorni).")
+        raise ValueError("No day available for the chosen date (1-minute data covers only ~8 days).")
     avviso = ""
     if len(scelti) < giorni:
-        avviso = f"Attenzione: disponibili solo {len(scelti)} giorni su {giorni} richiesti."
+        avviso = f"Warning: only {len(scelti)} days available out of {giorni} requested."
     return df[df["giorno"].isin(scelti)].copy(), scelti, avviso
 
 
 def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_valore_pct: float = 70.0) -> dict:
-    """Calcolo del Volume Profile: quote in perdita/guadagno, POC, VWAP, area di valore, zone affollate."""
+    """Calculation of Volume Profile: loss/profit shares, POC, VWAP, Value Area, high-volume zones."""
     tp = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy()
     vol = df["Volume"].to_numpy(dtype=float)
     vol_tot = vol.sum()
@@ -82,7 +82,7 @@ def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_va
     pari = vol_tot - perdita - guadagno
 
     lo, hi = tp.min(), tp.max()
-    if hi == lo:                                   # titolo fermo: evita bin degeneri
+    if hi == lo:                                   # Static price: avoid degenerate bins
         lo, hi = lo - 1e-6, hi + 1e-6
     bins = np.linspace(lo, hi, n_bin + 1)
     idx = np.clip(np.digitize(tp, bins) - 1, 0, n_bin - 1)
@@ -104,13 +104,13 @@ def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_va
     zona_sotto = max(sotto, key=lambda i: profilo[i]) if sotto else None
 
     def fmt_zona(i):
-        return f"{bins[i]:.2f} - {bins[i+1]:.2f} ({profilo[i]/vol_tot*100:.1f}% del volume)"
+        return f"{bins[i]:.2f} - {bins[i+1]:.2f} ({profilo[i]/vol_tot*100:.1f}% of volume)"
 
     top = sorted(np.argsort(profilo)[::-1][:5], key=lambda k: -profilo[k])
     zone = pd.DataFrame([{
         "Zona di prezzo": f"{bins[i]:.2f} - {bins[i+1]:.2f}",
         "% del volume": round(profilo[i] / vol_tot * 100, 1),
-        "Posizione": "sopra il prezzo (in perdita)" if centri[i] > prezzo_att else "sotto il prezzo (in guadagno)",
+        "Posizione": "above price (in loss)" if centri[i] > prezzo_att else "below price (in profit)",
         "Distanza dal prezzo %": round((centri[i] / prezzo_att - 1) * 100, 2),
     } for i in top])
 
@@ -125,7 +125,7 @@ def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_va
 
 
 def conclusioni(pct_perdita: float, prezzo_att: float, val: float, vah: float):
-    """Soglie di maggioranza: >=60% perdita, <=40% guadagno, altrimenti misto."""
+    """Majority thresholds: >=60% loss, <=40% profit, otherwise mixed."""
     if pct_perdita >= 60:
         maggioranza = "PERDITA"
     elif pct_perdita <= 40:
@@ -142,7 +142,7 @@ def conclusioni(pct_perdita: float, prezzo_att: float, val: float, vah: float):
 
 
 def dettaglio_per_giorno(df: pd.DataFrame, prezzo_att: float, soglia: float = 2.0) -> pd.DataFrame:
-    """Tabelle per giorno di aggregazione volumi e posizionamento."""
+    """Daily aggregation tables for volume and positioning."""
     tp_all = (df["High"] + df["Low"] + df["Close"]) / 3
     righe = []
     for g, d in df.groupby("giorno"):
@@ -168,8 +168,8 @@ def calcola_microstruttura_ticker(ticker: str, giorni: int = 1, data_fine: str =
                                   n_bin: int = 30, prezzo_riferimento: float = 0.0, area_valore_pct: float = 70.0,
                                   raw: pd.DataFrame = None) -> dict:
     """
-    Analisi completa di un ticker. `raw` permette di passare i minuti gia'
-    scaricati (utile per i test); altrimenti vengono scaricati da yfinance.
+    Complete ticker analysis. `raw` allows passing pre-downloaded minute data
+    (useful for testing); otherwise data is fetched from yfinance.
     """
     if raw is None:
         raw = scarica_minuti(ticker, solo_orari_regolari)
