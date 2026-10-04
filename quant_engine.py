@@ -1,7 +1,7 @@
 """
-Motore quantitativo: replica la pipeline del Colab "NASDAQ_TimesFM3".
+Motore quantitativo: pipeline per la previsione quantilica dei prezzi.
 
-Stessa logica del notebook:
+Logica di calcolo:
   * prezzi aggiustati (auto_adjust=True), storico 5y, calendario comune, buchi isolati riempiti
   * TimesFM-3 applicato ai RENDIMENTI LOG (ultimi CONTEXT_LEN giorni), non ai prezzi
   * decili del modello -> mediana (decile 0.5), P10 (0.1), P90 (0.9)
@@ -10,7 +10,7 @@ Stessa logica del notebook:
   * universo = titoli NASDAQ per market cap decrescente (screener Nasdaq, fallback Wikipedia)
 
 Se `timesfm3` non e' installato il motore NON inventa un trend: usa la baseline
-"Naive (0%)" del Colab (mediana 0) con sigma storica, e lo dichiara nella colonna `Modello`.
+"Naive (0%)" (mediana 0) con sigma storica, e lo dichiara nella colonna `Modello`.
 """
 import io
 import warnings
@@ -21,11 +21,11 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-Z80 = 1.2815515655446004          # quantile 90% della normale standard (come nel Colab)
+Z80 = 1.2815515655446004          # quantile 90% della normale standard
 CONTEXT_LEN = 1024                # giorni di rendimenti in input al modello
 HISTORY = "5y"
 HORIZON = 5
-SOGLIA_TREND = 0.10               # NOTA: specifica della dashboard (il Colab non ha un "trend"), vedi _trend_da_previsione
+SOGLIA_TREND = 0.10               # NOTA: specifica della dashboard, vedi _trend_da_previsione
 
 MODELLO_TFM3 = "TimesFM-3"
 MODELLO_FALLBACK = "Naive (0%) - TimesFM-3 non installato"
@@ -36,7 +36,7 @@ SHARE_CLASS_DUPES = {"GOOG": "GOOGL", "FOX": "FOXA", "NWS": "NWSA"}
 
 
 # ----------------------------------------------------------------------------------------------
-# Universo (identico al Colab)
+# Universo
 # ----------------------------------------------------------------------------------------------
 def _clean_universe(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -73,7 +73,7 @@ def universe_wikipedia() -> pd.DataFrame:
 
 
 def ricava_universo(n_tickers: int = 100, buffer: int = 20, tickers_manuali=None):
-    """Ritorna (DataFrame Ticker/MarketCap, fonte, lista candidati) come le celle 2 e 9 del Colab."""
+    """Ritorna (DataFrame Ticker/MarketCap, fonte, lista candidati)."""
     if tickers_manuali:
         uni = pd.DataFrame({"Ticker": [t.strip().upper() for t in tickers_manuali], "MarketCap": np.nan})
         return uni, "lista manuale", uni["Ticker"].tolist()
@@ -84,7 +84,7 @@ def ricava_universo(n_tickers: int = 100, buffer: int = 20, tickers_manuali=None
             fonte = nome
             if len(uni) >= 30:
                 break
-        except Exception as e:  # noqa: BLE001 - come nel Colab: si passa alla fonte successiva
+        except Exception as e:  # noqa: BLE001 - si passa alla fonte successiva
             warnings.warn(f"{nome}: non disponibile ({type(e).__name__}: {e})")
     if uni is None or len(uni) < 30:
         raise RuntimeError("Universo non ricavato: usa una lista manuale di ticker.")
@@ -95,7 +95,7 @@ def ricava_universo(n_tickers: int = 100, buffer: int = 20, tickers_manuali=None
 # Prezzi (calendario comune)
 # ----------------------------------------------------------------------------------------------
 def prepara_prezzi(raw: pd.DataFrame, cand: list, n_tickers: int):
-    """Allineamento del Colab: tiene titoli con storico ~completo, ffill, dropna. Ritorna (prices, scartati)."""
+    """Allineamento prezzi: tiene titoli con storico ~completo, ffill, dropna. Ritorna (prices, scartati)."""
     raw = raw.copy()
     raw.index = pd.to_datetime(raw.index).tz_localize(None)
     raw = raw.dropna(axis=1, thresh=int(0.99 * len(raw)))
@@ -125,7 +125,7 @@ def _log_returns(price_arrays, context_len=CONTEXT_LEN):
 
 
 def carica_timesfm3(per_core_batch_size: int = 32):
-    """Carica TimesFM-3 come nel Colab. Ritorna il forecaster oppure None se il pacchetto non c'e'."""
+    """Carica TimesFM-3. Ritorna il forecaster oppure None se il pacchetto non c'e'."""
     try:
         import torch
         from timesfm3 import TimesFM3Evaluator, ModelConfig
@@ -139,7 +139,7 @@ def carica_timesfm3(per_core_batch_size: int = 32):
 
 
 def tfm3_returns(forecaster, price_arrays, horizon, use_symmetric_averaging=False, context_len=CONTEXT_LEN):
-    """TimesFM-3: rendimento log cumulato (mediana) e sigma cumulata per i passi 1..horizon (identico al Colab)."""
+    """TimesFM-3: rendimento log cumulato (mediana) e sigma cumulata per i passi 1..horizon."""
     outs = list(forecaster.predict_batch(_log_returns(price_arrays, context_len), horizon=horizon,
                                          return_quantiles=True,
                                          use_symmetric_averaging=use_symmetric_averaging))
@@ -149,7 +149,7 @@ def tfm3_returns(forecaster, price_arrays, horizon, use_symmetric_averaging=Fals
 
 
 def naive_returns(price_arrays, horizon, context_len=CONTEXT_LEN):
-    """Baseline 'Naive (0%)' del Colab con sigma storica: mediana 0, intervallo simmetrico."""
+    """Baseline 'Naive (0%)' con sigma storica: mediana 0, intervallo simmetrico."""
     mu = np.zeros((len(price_arrays), horizon))
     sg_step = np.array([np.std(r[-252:], ddof=1) if len(r) > 2 else 0.02
                         for r in _log_returns(price_arrays, context_len)])
@@ -171,7 +171,7 @@ def _trend_da_previsione(mu: float, sg: float, soglia: float = SOGLIA_TREND) -> 
 
 
 # ----------------------------------------------------------------------------------------------
-# Previsione finale (una riga per titolo) - cella 15 del Colab
+# Previsione finale (una riga per titolo)
 # ----------------------------------------------------------------------------------------------
 def tabella_previsioni(prices: pd.DataFrame, horizon: int = HORIZON, forecaster=None, mc_map=None,
                        use_symmetric_averaging: bool = False, soglia_trend: float = SOGLIA_TREND) -> pd.DataFrame:
@@ -214,7 +214,7 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
                        horizon: int = HORIZON, forecaster=None, use_symmetric_averaging: bool = False,
                        soglia_trend: float = SOGLIA_TREND, min_tickers: int = 20):
     """
-    Pipeline completa del Colab. `tickers=None` -> universo automatico (top n_tickers NASDAQ per market cap).
+    Pipeline completa di previsione. `tickers=None` -> universo automatico (top n_tickers NASDAQ per market cap).
     Ritorna (df_previsioni, info) con info = {fonte, scartati, giorni, dal, al, run_ts}.
     """
     uni, fonte, cand = ricava_universo(n_tickers, buffer, tickers)
@@ -233,6 +233,6 @@ def calcola_previsioni(tickers=None, n_tickers: int = 100, buffer: int = 20, his
 
 
 def calcola_quant_trend_ticker(ticker: str, period: str = HISTORY, horizon: int = HORIZON, forecaster=None) -> dict:
-    """Compatibilita' con la vecchia API: previsione per un solo ticker (stessa pipeline del Colab)."""
+    """Compatibilita' con la vecchia API: previsione per un solo ticker."""
     df, _ = calcola_previsioni([ticker], history=period, horizon=horizon, forecaster=forecaster)
     return df.iloc[0].to_dict()

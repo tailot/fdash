@@ -12,9 +12,8 @@ st.set_page_config(page_title="Dashboard Master di Analisi Finanziaria", page_ic
 
 st.title("📊 Dashboard Master di Analisi Finanziaria Integrata")
 st.markdown("""
-Unisce le due analisi dei Colab — **previsione TimesFM-3** (rendimenti log, quantili P10/P90) e
+Unisce le due analisi — **previsione TimesFM-3** (rendimenti log, quantili P10/P90) e
 **microstruttura dei volumi** (buy/sell stimato + Volume Profile) — e le arricchisce con **Gemini 2.5 Flash**.
-Il calcolo segue passo per passo la logica dei notebook.
 """)
 
 @st.cache_resource(show_spinner="Caricamento TimesFM-3...")
@@ -29,7 +28,7 @@ api_key = st.sidebar.text_input("Chiave API Gemini (gemini-2.5-flash):", type="p
                                 help="Senza chiave viene usata l'analisi euristica locale.")
 
 st.sidebar.subheader("Universo")
-universo = st.sidebar.radio("Titoli:", ["Lista manuale", "Top N Nasdaq per market cap (come il Colab)"], index=0)
+universo = st.sidebar.radio("Titoli:", ["Lista manuale", "Top N Nasdaq per market cap"], index=0)
 if universo == "Lista manuale":
     input_tickers = st.sidebar.text_input("Ticker (separati da virgola):", "MSTR, AAPL, NVDA, TSLA, MSFT")
     n_top = 100
@@ -37,13 +36,13 @@ else:
     input_tickers = ""
     n_top = st.sidebar.slider("N titoli:", 20, 100, 100, step=10)
 
-st.sidebar.subheader("Previsione (Colab TimesFM-3)")
+st.sidebar.subheader("Previsione (TimesFM-3)")
 horizon = st.sidebar.slider("Orizzonte (giorni di borsa):", 1, 20, HORIZON)
 soglia_trend = st.sidebar.number_input("Soglia trend (x sigma cumulata)", 0.0, 1.0, SOGLIA_TREND, 0.05,
                                        help="Specifica della dashboard: BUY/SELL se |mediana| > soglia × sigma.")
 usa_tfm = st.sidebar.checkbox("Usa TimesFM-3 (se installato)", value=True)
 
-st.sidebar.subheader("Volumi (Colab volumi al minuto)")
+st.sidebar.subheader("Volumi (volumi al minuto)")
 metodo = st.sidebar.selectbox("Metodo buy/sell:", ["clv", "candela", "tick"], index=0)
 giorni_intra = st.sidebar.slider("Giorni analizzati:", 1, 5, 1)
 data_fine = st.sidebar.text_input("Data fine (AAAA-MM-GG, vuoto = ultimo giorno):", "")
@@ -100,9 +99,9 @@ if True:
     st.caption(f"Universo: {info['fonte']} · {len(df_quant)} titoli · {info['giorni']} giorni "
                f"({info['dal']} → {info['al']}) · run {info['run_ts']} · modello: {modello}")
     if modello == MODELLO_FALLBACK:
-        st.warning("TimesFM-3 non è installato: la previsione usa la baseline **Naive (0%)** del Colab "
+        st.warning("TimesFM-3 non è installato: la previsione usa la baseline **Naive (0%)** "
                    "(mediana = ultimo prezzo, intervallo dalla volatilità storica), quindi il trend risulta "
-                   "quasi sempre EQUILIBRIO. Installa `requirements-timesfm.txt` per i risultati del Colab.")
+                   "quasi sempre EQUILIBRIO. Installa `requirements-timesfm.txt` per utilizzare TimesFM-3.")
     if info["scartati"]:
         st.caption("Scartati (storico incompleto): " + ", ".join(info["scartati"][:40]))
     for e in nat["errori"]:
@@ -193,7 +192,7 @@ with g2:
     plt.setp(ax2.get_xticklabels(), rotation=90, fontsize=7)
     st.pyplot(fig2)
 
-# Dettaglio per ticker, come gli output testuali/tabellari/grafici del Colab volumi
+# Dettaglio per ticker
 if nat and nat["vol"]:
     st.subheader("4. Dettaglio ticker (Volume Profile e per giorno)")
     scelto = st.selectbox("Ticker:", [r["Ticker"] for r in nat["vol"]])

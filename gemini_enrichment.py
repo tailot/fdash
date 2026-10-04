@@ -16,7 +16,7 @@ def _fmt(x, suffix=""):
 
 
 def _coerenza(trend: str, delta: float | None) -> str:
-    """Confronta il segno del trend del modello con il delta volumi (soglia 2%, come il Colab volumi)."""
+    """Confronta il segno del trend del modello con il delta volumi (soglia 2%)."""
     if delta is None or trend not in ("BUY", "SELL"):
         return ""
     if (trend == "BUY" and delta > 2.0) or (trend == "SELL" and delta < -2.0):
@@ -32,7 +32,7 @@ def genera_analisi_gemini(ticker: str, ultimo_prezzo: float, trend_timesfm: str,
     """
     Genera le colonne qualitative 'Sentiment News' e 'Sintesi / Verdetto'.
     Con chiave Gemini: gemini-2.5-flash. Senza chiave (o in caso di errore): analisi euristica locale che
-    usa le stesse soglie dei Colab (perdita >= 60% / guadagno <= 40%, equilibrio volumi +-2%).
+    usa le stesse soglie di analisi (perdita >= 60% / guadagno <= 40%, equilibrio volumi +-2%).
     I valori mancanti (None/NaN) vengono dichiarati "n/d", mai inventati.
     """
     delta = _num(delta_volumi_intra)
