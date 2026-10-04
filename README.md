@@ -117,3 +117,9 @@ pytest test_modules.py
 ├── docker-compose.yml       # Docker Compose configuration
 └── README.md                # Project usage guide
 ```
+
+---
+
+## ⚠️ Disclaimer
+
+This project was created strictly for educational and research purposes. It does not constitute financial advice, investment recommendations, or an incentive to invest real money. The author assumes no responsibility or liability for any direct or indirect damages or financial losses incurred as a result of using this software.
