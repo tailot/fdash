@@ -1,7 +1,7 @@
 """
-Motore volumi: replica il Colab "analisi_volumi_buy_sell".
+Motore volumi: analisi di microstruttura dei volumi intraday.
 
-Stessa logica del notebook:
+Logica di calcolo:
   * dati a 1 minuto (Yahoo: ~8 giorni), solo orari regolari, volume > 0
   * stima buy/sell con 3 metodi (candela / clv / tick) e verdetto con soglia di equilibrio
   * Volume Profile sul prezzo tipico (H+L+C)/3: % in perdita / guadagno, POC, VWAP, area di valore (VAL/VAH)
@@ -50,7 +50,7 @@ def scarica_minuti(ticker: str, solo_orari_regolari: bool = True) -> pd.DataFram
 
 
 def prepara_minuti(raw: pd.DataFrame, giorni: int = 1, data_fine: str = ""):
-    """Pulizia e selezione degli ultimi `giorni` (cella 3 del Colab). Ritorna (df, lista_giorni, avviso)."""
+    """Pulizia e selezione degli ultimi `giorni`. Ritorna (df, lista_giorni, avviso)."""
     df = raw.copy()
     if isinstance(df.columns, pd.MultiIndex):
         df.columns = df.columns.get_level_values(0)
@@ -72,7 +72,7 @@ def prepara_minuti(raw: pd.DataFrame, giorni: int = 1, data_fine: str = ""):
 
 
 def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_valore_pct: float = 70.0) -> dict:
-    """Cella 8 del Colab: quote in perdita/guadagno, POC, VWAP, area di valore, zone affollate."""
+    """Calcolo del Volume Profile: quote in perdita/guadagno, POC, VWAP, area di valore, zone affollate."""
     tp = ((df["High"] + df["Low"] + df["Close"]) / 3).to_numpy()
     vol = df["Volume"].to_numpy(dtype=float)
     vol_tot = vol.sum()
@@ -125,7 +125,7 @@ def volume_profile(df: pd.DataFrame, prezzo_att: float, n_bin: int = 30, area_va
 
 
 def conclusioni(pct_perdita: float, prezzo_att: float, val: float, vah: float):
-    """Soglie identiche al Colab: >=60% perdita, <=40% guadagno, altrimenti misto."""
+    """Soglie di maggioranza: >=60% perdita, <=40% guadagno, altrimenti misto."""
     if pct_perdita >= 60:
         maggioranza = "PERDITA"
     elif pct_perdita <= 40:
@@ -142,7 +142,7 @@ def conclusioni(pct_perdita: float, prezzo_att: float, val: float, vah: float):
 
 
 def dettaglio_per_giorno(df: pd.DataFrame, prezzo_att: float, soglia: float = 2.0) -> pd.DataFrame:
-    """Tabelle per giorno delle celle 4 e 8 del Colab, unite."""
+    """Tabelle per giorno di aggregazione volumi e posizionamento."""
     tp_all = (df["High"] + df["Low"] + df["Close"]) / 3
     righe = []
     for g, d in df.groupby("giorno"):
@@ -168,7 +168,7 @@ def calcola_microstruttura_ticker(ticker: str, giorni: int = 1, data_fine: str =
                                   n_bin: int = 30, prezzo_riferimento: float = 0.0, area_valore_pct: float = 70.0,
                                   raw: pd.DataFrame = None) -> dict:
     """
-    Analisi completa di un ticker, equivalente a eseguire il Colab. `raw` permette di passare i minuti gia'
+    Analisi completa di un ticker. `raw` permette di passare i minuti gia'
     scaricati (utile per i test); altrimenti vengono scaricati da yfinance.
     """
     if raw is None:

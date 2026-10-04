@@ -43,8 +43,8 @@ class FakeTimesFM:
         return [FakeOut(np.tile(q, (horizon, 1))) for _ in series]
 
 
-# ------------------------------------------------------------------ quant: stesse formule del Colab
-def test_cum_stats_come_colab():
+# ------------------------------------------------------------------ quant: formule
+def test_cum_stats():
     med = np.full((1, 5), 0.002)
     q10, q90 = med - 0.01 * qe.Z80, med + 0.01 * qe.Z80
     mu, sg = qe._cum_stats(med, q10, q90)
@@ -111,7 +111,7 @@ def test_calcola_previsioni_pipeline(monkeypatch):
     assert one["Ticker"] == "AAA" and "P10" in one
 
 
-# ------------------------------------------------------------------ volumi: stesse formule del Colab
+# ------------------------------------------------------------------ volumi: formule
 def test_stima_buy_sell():
     df = pd.DataFrame({"Open": [100.0, 102.0, 101.0], "High": [103.0, 104.0, 102.0],
                        "Low": [99.0, 100.0, 100.0], "Close": [102.0, 101.0, 101.0], "Volume": [1000, 2000, 1500]})
