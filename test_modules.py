@@ -218,7 +218,7 @@ def test_db_persistence(tmp_path):
     ]
     info = {"fonte": "manual list", "run_ts": "2026-03-30 12:00:00"}
     nat_data = {"quant": df_quant, "info": info, "vol": vol_rows, "metodo": "clv"}
-    params = {"horizon": 5, "metodo": "clv"}
+    params = {"horizon": 5, "metodo": "clv", "is_manual": True}
 
     # Save
     run_id = db.save_run(nat_data, params, db_file=test_db)
@@ -229,6 +229,7 @@ def test_db_persistence(tmp_path):
     assert len(runs) == 1
     assert runs[0]["id"] == run_id
     assert runs[0]["n_tickers"] == 2
+    assert "[AAPL, MSFT]" in runs[0]["run_label"]
 
     # Get
     retrieved = db.get_run(run_id, db_file=test_db)

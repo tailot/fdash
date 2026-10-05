@@ -91,7 +91,16 @@ def save_run(nat_data: dict, params: dict, db_file: str = DB_FILE) -> int:
     model_used = str(df_quant["Modello"].iloc[0]) if isinstance(df_quant, pd.DataFrame) and "Modello" in df_quant else "Unknown"
     horizon = params.get("horizon", 5)
 
-    run_label = f"{timestamp} | {universe_type} ({n_tickers} stocks) | {model_used}"
+    ticker_list = []
+    if isinstance(df_quant, pd.DataFrame) and "Ticker" in df_quant.columns:
+        ticker_list = df_quant["Ticker"].tolist()
+
+    is_manual_list = (universe_type == "manual list" or params.get("is_manual", False))
+    if is_manual_list and 0 < len(ticker_list) < 6:
+        symbols_str = ", ".join(ticker_list)
+        run_label = f"{timestamp} | [{symbols_str}] ({n_tickers} stocks) | {model_used}"
+    else:
+        run_label = f"{timestamp} | {universe_type} ({n_tickers} stocks) | {model_used}"
 
     with get_connection(db_file) as conn:
         cursor = conn.cursor()
