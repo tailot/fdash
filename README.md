@@ -81,11 +81,48 @@ You can run the application in an isolated and automated environment using **Doc
 
 ---
 
-## ⚙️ Application Usage
+## ⚙️ Application Usage & Sidebar Menu Customizations
 
-1. **Set parameters** in the sidebar: tickers (manual list or top N Nasdaq), horizon, buy/sell method, days, etc., then click **"Run Native Analysis"**.
-2. **Export the Report:**
-   - Click the **"Download report_finale_integrato.csv"** button to export the integrated data.
+The application sidebar allows you to customize every aspect of the quantitative forecast, volume microstructure analysis, backtesting, and UI language.
+
+### 🌐 Options & Language Selection
+- **Language / Lingua:** Switch the application interface between 5 supported languages:
+  - English (`en`)
+  - Italian (`it`)
+  - Spanish (`es`)
+  - Chinese (`zh`)
+  - French (`fr`)
+
+### 📊 Universe Configuration
+- **Stocks Universe Selection:** Choose between two modes:
+  - **Manual List:** Enter custom stock symbols (comma-separated, e.g., `MSTR, AAPL, NVDA, TSLA, MSFT`).
+  - **Top N Nasdaq by Market Cap:** Use a slider (range: 20 to 100 stocks, step: 10) to automatically analyze the top Nasdaq tickers by market capitalization.
+
+### 📈 Forecast Settings (TimesFM-3)
+- **Horizon (trading days):** Select the forecast horizon between 1 and 20 trading days (default: 10).
+- **Trend Threshold (x cumulated sigma):** Set the multiplier (range: 0.0 to 1.0, default: 0.20) for classifying trends. A BUY or SELL trend signal is triggered when the expected return magnitude exceeds `threshold × sigma`.
+- **Use TimesFM-3 Checkbox:** Enable/disable TimesFM-3 probabilistic neural network inference. When unchecked or unavailable, the system defaults to the Naive (0%) baseline model.
+
+### 🔍 Volume Microstructure Settings (1-Minute intraday data)
+- **Buy/Sell Estimation Method:** Select the algorithm used to split volume into buy vs. sell flows:
+  - `clv` (Close Location Value / Accumulation-Distribution formula)
+  - `candela` (Candle body direction)
+  - `tick` (Tick-by-tick / minute-level price change direction)
+- **Analyzed Days:** Set the intraday historical depth to analyze from 1 to 5 trading days.
+- **End Date (`YYYY-MM-DD`):** Specify a target historical end date (leave empty to fetch up to the latest available trading day).
+- **Regular Hours Only:** Checkbox to filter out pre-market and post-market trading sessions.
+- **Equilibrium Threshold %:** Percentage threshold (default: 2.0%) to determine whether volume delta is in equilibrium vs. buyer/seller dominant.
+- **Volume Profile Bins:** Set the number of price histogram bins for Volume Profile analysis (range: 10 to 100, default: 30).
+- **Value Area %:** Define the percentage of total volume included in the Value Area (VAL–VAH range; default: 70%).
+- **Reference Price:** Set a custom reference price (default: `0.0`, which uses the last close price) to evaluate buyers in profit vs. loss.
+
+### 🧪 Backtesting Parameters
+- **Number of past dates:** In the backtesting section of the main dashboard, set the number of historical non-overlapping evaluation dates (5 to 100 dates) for point-in-time walk-forward backtesting.
+
+### 🚀 Running Analysis & Exporting
+1. Adjust the desired options in the sidebar and click **"Run Native Analysis"**.
+2. Review the localized heuristic analysis, integrated report table, comparative charts, and detailed Volume Profile charts per ticker.
+3. Click **"Download report_finale_integrato.csv"** to export the integrated dataset.
 
 ---
 
