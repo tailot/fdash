@@ -1,4 +1,5 @@
 """Offline test suite: no network access (yfinance and forecaster are mocked with synthetic data)."""
+import os
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +9,7 @@ import volume_engine as ve
 from volume_engine import stima_buy_sell, verdetto_delta
 from heuristic_enrichment import genera_analisi_euristica
 from i18n import t, LANGUAGES
+import db_engine as db
 
 
 # ------------------------------------------------------------------ synthetic data
@@ -199,3 +201,43 @@ def test_sentiment_analysis():
     res_bull = analyzer.analyze("Company reports record revenue and strong growth rally", lang="en")
     assert res_bull["sentiment_label"] == "BULLISH"
     assert "sentiment_score" in res_bull
+
+
+# ------------------------------------------------------------------ Database Persistence Engine Tests
+def test_db_persistence(tmp_path):
+    test_db = str(tmp_path / "test_history.db")
+
+    # Sample mock native analysis data
+    df_quant = pd.DataFrame([
+        {"Ticker": "AAPL", "Ultimo_Prezzo": 150.0, "Trend_TimesFM": "BUY", "Modello": "Naive (0%)"},
+        {"Ticker": "MSFT", "Ultimo_Prezzo": 300.0, "Trend_TimesFM": "SELL", "Modello": "Naive (0%)"}
+    ])
+    vol_rows = [
+        ve.calcola_microstruttura_ticker("AAPL", giorni=1, raw=_minuti(2)),
+        ve.calcola_microstruttura_ticker("MSFT", giorni=1, raw=_minuti(2))
+    ]
+    info = {"fonte": "manual list", "run_ts": "2026-03-30 12:00:00"}
+    nat_data = {"quant": df_quant, "info": info, "vol": vol_rows, "metodo": "clv"}
+    params = {"horizon": 5, "metodo": "clv"}
+
+    # Save
+    run_id = db.save_run(nat_data, params, db_file=test_db)
+    assert run_id > 0
+
+    # List
+    runs = db.list_runs(db_file=test_db)
+    assert len(runs) == 1
+    assert runs[0]["id"] == run_id
+    assert runs[0]["n_tickers"] == 2
+
+    # Get
+    retrieved = db.get_run(run_id, db_file=test_db)
+    assert retrieved is not None
+    assert len(retrieved["nativo"]["quant"]) == 2
+    assert retrieved["nativo"]["quant"].iloc[0]["Ticker"] == "AAPL"
+    assert len(retrieved["nativo"]["vol"]) == 2
+
+    # Delete
+    deleted = db.delete_run(run_id, db_file=test_db)
+    assert deleted
+    assert len(db.list_runs(db_file=test_db)) == 0
