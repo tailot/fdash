@@ -20,8 +20,14 @@ The native calculation includes:
    - 1-minute data (~8 days), 1-5 days, `DATA_FINE` (End Date), regular hours, `candela` (candle) / `clv` / `tick` methods, equilibrium threshold.
    - Volume Profile on typical price (H+L+C)/3: `% in loss/gain`, POC, VWAP, value area (VAL/VAH), most crowded zones above/below, top 5 zones, daily detail, conclusions (60% / 40% thresholds).
 3. **Data**: the dashboard calculates everything natively (no CSV loading or reading from folders).
-4. **Local Heuristic Enrichment — `heuristic_enrichment.py`**: `News Sentiment` and `Summary / Verdict`, with defined rule thresholds. Missing data are marked as "N/A", never filled with fictitious values.
-5. **Report**: integrated table (*outer* join on `Ticker`), download `report_finale_integrato.csv`, comparative charts and, for native calculation, detail per ticker (Volume Profile, tables).
+4. **Market Snapshot & Actionable Signals Matrix**:
+   - **Market Snapshot**: Real-time KPI overview showing total stocks analyzed, count/percentage of BUY/SELL signals, average volume delta, and top 5 bullish/bearish volume leaderboards.
+   - **Actionable Signals**: Convergence-based multi-factor decision matrix evaluating TimesFM trend, volume delta, % traders in loss, and forecasted return into actionable signals (`BUY`, `SELL`, `WATCH`, `WAIT`) accompanied by a confidence score (`0%` to `100%`).
+5. **FinBERT NLP News Sentiment — `advanced_nlp_sentiment.py`**: State-of-the-art financial NLP sentiment classification leveraging Hugging Face FinBERT (`ProsusAI/finbert`) with multilingual fallback rule engines across 5 languages.
+6. **Local Heuristic Enrichment — `heuristic_enrichment.py`**: Synthesizes quantitative indicators and NLP sentiment into qualitative verdicts. Missing data are marked as "N/A", never filled with fictitious values.
+7. **Temporal Walk-Forward Backtesting — `backtesting.py`**: Point-in-time historical evaluation recomputing forecasts strictly using past data and comparing predictions against actual realized N-day returns (evaluating hit rates and return per signal).
+8. **Analysis History Archive (SQLite) — `db_engine.py`**: Automatic persistence of analysis runs (forecasts, volume microstructure, parameters) into a local SQLite database. Dedicated "History Archive" tab allows browsing, inspecting, and managing past runs.
+9. **Report**: integrated table (*outer* join on `Ticker`), download `report_finale_integrato.csv`, comparative charts and, for native calculation, detail per ticker (Volume Profile, tables).
 
 > ⚠️ Note: buy/sell is an **estimation** from candles (not real order flow); "in loss/gain" considers only the volumes of the selected period; the "today's top N" universe has survivorship bias. This is not investment advice.
 
@@ -99,8 +105,8 @@ The application sidebar allows you to customize every aspect of the quantitative
   - **Top N Nasdaq by Market Cap:** Use a slider (range: 20 to 100 stocks, step: 10) to automatically analyze the top Nasdaq tickers by market capitalization.
 
 ### 📈 Forecast Settings (TimesFM-3)
-- **Horizon (trading days):** Select the forecast horizon between 1 and 20 trading days (default: 10).
-- **Trend Threshold (x cumulated sigma):** Set the multiplier (range: 0.0 to 1.0, default: 0.20) for classifying trends. A BUY or SELL trend signal is triggered when the expected return magnitude exceeds `threshold × sigma`.
+- **Horizon (trading days):** Select the forecast horizon between 1 and 20 trading days (default: 5).
+- **Trend Threshold (x cumulated sigma):** Set the multiplier (range: 0.0 to 1.0, default: 0.10) for classifying trends. A BUY or SELL trend signal is triggered when the expected return magnitude exceeds `threshold × sigma`.
 - **Use TimesFM-3 Checkbox:** Enable/disable TimesFM-3 probabilistic neural network inference. When unchecked or unavailable, the system defaults to the Naive (0%) baseline model.
 
 ### 🔍 Volume Microstructure Settings (1-Minute intraday data)
@@ -118,6 +124,10 @@ The application sidebar allows you to customize every aspect of the quantitative
 
 ### 🧪 Backtesting Parameters
 - **Number of past dates:** In the backtesting section of the main dashboard, set the number of historical non-overlapping evaluation dates (5 to 100 dates) for point-in-time walk-forward backtesting.
+
+### 🗂️ Navigation Tabs & History Archive
+- **Live Analysis Tab:** Configure sidebar parameters and click "Run Native Analysis" to compute forecasts, volume microstructure, Market Snapshots, and Actionable Signals.
+- **History / Archive Tab:** Browse automatically persisted historical runs saved in SQLite (`db_engine.py`). Inspect past results, reload detailed reports, or delete old entries.
 
 ### 🚀 Running Analysis & Exporting
 1. Adjust the desired options in the sidebar and click **"Run Native Analysis"**.
@@ -140,16 +150,21 @@ pytest test_modules.py
 
 ```
 .
-├── app.py                   # Main Streamlit dashboard
+├── .github/                 # GitHub Actions CI workflows (automated unit testing)
+├── app.py                   # Main Streamlit dashboard interface & navigation tabs
 ├── quant_engine.py          # TimesFM-3 quantitative pipeline (universe, prices, log returns, quantiles)
-├── volume_engine.py         # Volume pipeline (buy/sell, Volume Profile, value area)
-├── heuristic_enrichment.py  # Local heuristic enrichment module
-├── test_modules.py          # Unit test suite
-├── requirements.txt         # Python dependencies
-├── requirements-timesfm.txt # Optional dependencies for TimesFM-3
-├── Dockerfile               # Docker image configuration
-├── docker-compose.yml       # Docker Compose configuration
-└── README.md                # Project usage guide
+├── volume_engine.py         # Volume pipeline (buy/sell, Volume Profile, value area, POC/VWAP)
+├── heuristic_enrichment.py  # Local heuristic qualitative enrichment module
+├── advanced_nlp_sentiment.py # FinBERT NLP and rule-based news sentiment analysis engine
+├── backtesting.py           # Temporal walk-forward backtesting & hit rate evaluation engine
+├── db_engine.py             # SQLite persistence engine for run history archive
+├── i18n.py                  # Internationalization module supporting 5 languages (EN, IT, ES, ZH, FR)
+├── test_modules.py          # Comprehensive unit test suite
+├── requirements.txt         # Core Python dependencies
+├── requirements-timesfm.txt # Optional dependencies for real TimesFM-3 model
+├── Dockerfile               # Docker container definition
+├── docker-compose.yml       # Docker Compose service definition
+└── README.md                # Project documentation and usage guide
 ```
 
 ---
