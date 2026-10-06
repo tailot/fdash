@@ -264,8 +264,6 @@ def render_report_view(nat: dict, params: dict, is_historical: bool = False, run
         if col not in merged.columns:
             merged[col] = np.nan
 
-    st.subheader(t("enrichment_subheader", lang_code))
-
     @st.cache_data(show_spinner=False)
     def _arricchisci(righe: tuple, l_code: str):
         out = []
