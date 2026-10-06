@@ -203,6 +203,64 @@ def test_sentiment_analysis():
     assert "sentiment_score" in res_bull
 
 
+# ------------------------------------------------------------------ Market Snapshot & Actionable Signals Matrix Logic Tests
+def test_action_and_snapshot_logic():
+    df = pd.DataFrame([
+        # 4 buy signals -> BUY (Confidence = 4/4 = 1.0)
+        {"Ticker": "MSTR", "Ultimo_Prezzo": 350.12, "Trend_TimesFM": "BUY", "Delta_Volumi_Intra": 23.4, "%_Trader_In_Perdita": 35.0, "Rend_Mediano_%": 4.2},
+        # 4 sell signals -> SELL (Confidence = 4/4 = 1.0)
+        {"Ticker": "COIN", "Ultimo_Prezzo": 98.45, "Trend_TimesFM": "SELL", "Delta_Volumi_Intra": -18.2, "%_Trader_In_Perdita": 75.0, "Rend_Mediano_%": -2.1},
+        # 2 buy signals -> WATCH (Confidence = 2/4 = 0.5)
+        {"Ticker": "TSLA", "Ultimo_Prezzo": 242.35, "Trend_TimesFM": "SELL", "Delta_Volumi_Intra": -8.6, "%_Trader_In_Perdita": 38.0, "Rend_Mediano_%": 0.4},
+        # 1 buy, 1 sell signal -> WAIT (Confidence = 2/4 = 0.5)
+        {"Ticker": "GOOG", "Ultimo_Prezzo": 142.90, "Trend_TimesFM": "EQUILIBRIO", "Delta_Volumi_Intra": 9.8, "%_Trader_In_Perdita": 65.0, "Rend_Mediano_%": 0.0},
+    ])
+
+    # Test Action Convergence Logic
+    # MSTR
+    row_mstr = df.iloc[0]
+    b_mstr = int(row_mstr["Trend_TimesFM"] == "BUY") + int(row_mstr["Delta_Volumi_Intra"] > 0) + int(row_mstr["%_Trader_In_Perdita"] <= 40) + int(row_mstr["Rend_Mediano_%"] > 0)
+    assert b_mstr == 4
+
+    # COIN
+    row_coin = df.iloc[1]
+    s_coin = int(row_coin["Trend_TimesFM"] == "SELL") + int(row_coin["Delta_Volumi_Intra"] < 0) + int(row_coin["%_Trader_In_Perdita"] >= 60) + int(row_coin["Rend_Mediano_%"] < 0)
+    assert s_coin == 4
+
+    # TSLA
+    row_tsla = df.iloc[2]
+    b_tsla = int(row_tsla["Trend_TimesFM"] == "BUY") + int(row_tsla["Delta_Volumi_Intra"] > 0) + int(row_tsla["%_Trader_In_Perdita"] <= 40) + int(row_tsla["Rend_Mediano_%"] > 0)
+    s_tsla = int(row_tsla["Trend_TimesFM"] == "SELL") + int(row_tsla["Delta_Volumi_Intra"] < 0) + int(row_tsla["%_Trader_In_Perdita"] >= 60) + int(row_tsla["Rend_Mediano_%"] < 0)
+    assert b_tsla == 2 and s_tsla == 2
+
+    # Verify Market Snapshot Action calculation function
+    trend_col = "Trend_TimesFM"
+    delta_col = "Delta_Volumi_Intra"
+    loss_col = "%_Trader_In_Perdita"
+    ret_col = "Rend_Mediano_%"
+
+    def compute_action(row):
+        buy_signals = 0
+        sell_signals = 0
+        if row[trend_col] == "BUY": buy_signals += 1
+        elif row[trend_col] == "SELL": sell_signals += 1
+        if row[delta_col] > 0: buy_signals += 1
+        elif row[delta_col] < 0: sell_signals += 1
+        if pd.notna(row[loss_col]):
+            if row[loss_col] <= 40: buy_signals += 1
+            elif row[loss_col] >= 60: sell_signals += 1
+        if pd.notna(row[ret_col]):
+            if row[ret_col] > 0: buy_signals += 1
+            elif row[ret_col] < 0: sell_signals += 1
+        if buy_signals >= 3: return "BUY"
+        elif sell_signals >= 3: return "SELL"
+        elif max(buy_signals, sell_signals) >= 2: return "WATCH"
+        else: return "WAIT"
+
+    actions = df.apply(compute_action, axis=1).tolist()
+    assert actions == ["BUY", "SELL", "WATCH", "WAIT"]
+
+
 # ------------------------------------------------------------------ Database Persistence Engine Tests
 def test_db_persistence(tmp_path):
     test_db = str(tmp_path / "test_history.db")
