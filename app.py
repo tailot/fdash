@@ -30,6 +30,208 @@ def get_forecaster():
     return carica_timesfm3()
 
 
+def render_market_snapshot(final_df: pd.DataFrame, trend_col: str, delta_col: str,
+                           loss_col: str, ret_col: str, lang_code: str = "en"):
+    """Market Snapshot: KPIs + leader boards for immediate market state visibility."""
+    snapshot_df = final_df.copy()
+
+    def compute_action(row):
+        buy_signals = 0
+        sell_signals = 0
+
+        if trend_col in row and row[trend_col] == "BUY":
+            buy_signals += 1
+        elif trend_col in row and row[trend_col] == "SELL":
+            sell_signals += 1
+
+        if delta_col in row and pd.notna(row[delta_col]):
+            if row[delta_col] > 0:
+                buy_signals += 1
+            elif row[delta_col] < 0:
+                sell_signals += 1
+
+        if loss_col in row and pd.notna(row[loss_col]):
+            if row[loss_col] <= 40:
+                buy_signals += 1
+            elif row[loss_col] >= 60:
+                sell_signals += 1
+
+        if ret_col in row and pd.notna(row[ret_col]):
+            if row[ret_col] > 0:
+                buy_signals += 1
+            elif row[ret_col] < 0:
+                sell_signals += 1
+
+        if buy_signals >= 3:
+            return "BUY"
+        elif sell_signals >= 3:
+            return "SELL"
+        elif max(buy_signals, sell_signals) >= 2:
+            return "WATCH"
+        else:
+            return "WAIT"
+
+    snapshot_df["action"] = snapshot_df.apply(compute_action, axis=1)
+
+    st.subheader(t("market_snapshot_header", lang_code))
+
+    k1, k2, k3, k4 = st.columns(4)
+    total = len(snapshot_df)
+    buy_cnt = (snapshot_df["action"] == "BUY").sum()
+    sell_cnt = (snapshot_df["action"] == "SELL").sum()
+    avg_delta = snapshot_df[delta_col].mean() if delta_col in snapshot_df and pd.notna(snapshot_df[delta_col].mean()) else 0.0
+
+    k1.metric(t("snapshot_total_stocks", lang_code), total)
+    k2.metric(t("snapshot_buy_signals", lang_code), buy_cnt, f"{(buy_cnt/total)*100:.1f}%" if total > 0 else "0%")
+    k3.metric(t("snapshot_sell_signals", lang_code), sell_cnt, f"{(sell_cnt/total)*100:.1f}%" if total > 0 else "0%")
+    k4.metric(t("snapshot_avg_delta", lang_code), f"{avg_delta:.1f}%")
+
+    st.divider()
+
+    left_col, right_col = st.columns(2)
+
+    with left_col:
+        st.markdown(f"#### {t('snapshot_top_buy', lang_code)}")
+        if delta_col in snapshot_df.columns:
+            top_buy = snapshot_df.nlargest(5, delta_col)[["Ticker", delta_col, trend_col, "action"]]
+        else:
+            top_buy = snapshot_df.head(5)[["Ticker", trend_col, "action"]].copy()
+            top_buy[delta_col] = np.nan
+        top_buy = top_buy.copy()
+        top_buy.columns = ["Ticker", t("col_action_vol_delta", lang_code), t("col_action_trend", lang_code), t("col_action_action", lang_code)]
+        top_buy[t("col_action_vol_delta", lang_code)] = top_buy[t("col_action_vol_delta", lang_code)].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
+        st.dataframe(top_buy, use_container_width=True, hide_index=True)
+
+    with right_col:
+        st.markdown(f"#### {t('snapshot_top_sell', lang_code)}")
+        if delta_col in snapshot_df.columns:
+            top_sell = snapshot_df.nsmallest(5, delta_col)[["Ticker", delta_col, trend_col, "action"]]
+        else:
+            top_sell = snapshot_df.head(5)[["Ticker", trend_col, "action"]].copy()
+            top_sell[delta_col] = np.nan
+        top_sell = top_sell.copy()
+        top_sell.columns = ["Ticker", t("col_action_vol_delta", lang_code), t("col_action_trend", lang_code), t("col_action_action", lang_code)]
+        top_sell[t("col_action_vol_delta", lang_code)] = top_sell[t("col_action_vol_delta", lang_code)].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
+        st.dataframe(top_sell, use_container_width=True, hide_index=True)
+
+    st.divider()
+    return snapshot_df
+
+
+def render_action_table(final_df: pd.DataFrame, trend_col: str, delta_col: str,
+                        loss_col: str, ret_col: str, price_col: str = "Ultimo_Prezzo",
+                        lang_code: str = "en", key_suffix: str = "live"):
+    """Actionable Signals: convergence-based decision matrix."""
+    action_df = final_df.copy()
+    action_df["buy_signals"] = 0
+    action_df["sell_signals"] = 0
+
+    if trend_col in action_df.columns:
+        action_df.loc[action_df[trend_col] == "BUY", "buy_signals"] += 1
+        action_df.loc[action_df[trend_col] == "SELL", "sell_signals"] += 1
+
+    if delta_col in action_df.columns:
+        action_df.loc[action_df[delta_col] > 0, "buy_signals"] += 1
+        action_df.loc[action_df[delta_col] < 0, "sell_signals"] += 1
+
+    if loss_col in action_df.columns:
+        action_df.loc[action_df[loss_col] <= 40, "buy_signals"] += 1
+        action_df.loc[action_df[loss_col] >= 60, "sell_signals"] += 1
+
+    if ret_col in action_df.columns:
+        action_df.loc[action_df[ret_col] > 0, "buy_signals"] += 1
+        action_df.loc[action_df[ret_col] < 0, "sell_signals"] += 1
+
+    def compute_action(row):
+        b = row["buy_signals"]
+        s = row["sell_signals"]
+
+        if b >= 3 and s <= 1:
+            return "BUY"
+        elif s >= 3 and b <= 1:
+            return "SELL"
+        elif max(b, s) >= 2:
+            return "WATCH"
+        else:
+            return "WAIT"
+
+    action_df["action"] = action_df.apply(compute_action, axis=1)
+    action_df["confidence"] = (action_df["buy_signals"] + action_df["sell_signals"]) / 4.0
+
+    action_priority = {"BUY": 0, "SELL": 1, "WATCH": 2, "WAIT": 3}
+    action_df["action_priority"] = action_df["action"].map(action_priority)
+    action_df = action_df.sort_values(["action_priority", "confidence"], ascending=[True, False])
+    action_df = action_df.drop("action_priority", axis=1)
+
+    st.subheader(t("action_table_header", lang_code))
+
+    filter_col, sort_col, _ = st.columns([2, 2, 1])
+    with filter_col:
+        filter_action = st.selectbox(
+            t("filter_by_action", lang_code),
+            [t("all_filter", lang_code), "BUY", "SELL", "WATCH", "WAIT"],
+            key=f"filter_action_{key_suffix}"
+        )
+    with sort_col:
+        sort_by = st.selectbox(
+            t("sort_by", lang_code),
+            [
+                t("sort_action_confidence", lang_code),
+                t("sort_confidence", lang_code),
+                t("sort_vol_delta", lang_code)
+            ],
+            key=f"sort_by_{key_suffix}"
+        )
+
+    filtered_df = action_df.copy()
+    if filter_action != t("all_filter", lang_code):
+        filtered_df = filtered_df[filtered_df["action"] == filter_action]
+
+    if sort_by == t("sort_confidence", lang_code):
+        filtered_df = filtered_df.sort_values("confidence", ascending=False)
+    elif sort_by == t("sort_vol_delta", lang_code) and delta_col in filtered_df.columns:
+        filtered_df = filtered_df.sort_values(delta_col, key=abs, ascending=False)
+
+    cols_to_use = ["Ticker", price_col, trend_col, delta_col, loss_col, ret_col, "confidence", "action"]
+    display_cols = [c for c in cols_to_use if c in filtered_df.columns]
+    display_df = filtered_df[display_cols].copy()
+
+    col_name_mapping = {
+        "Ticker": "Ticker",
+        price_col: t("col_action_price", lang_code),
+        trend_col: t("col_action_trend", lang_code),
+        delta_col: t("col_action_vol_delta", lang_code),
+        loss_col: t("col_action_loss_pct", lang_code),
+        ret_col: t("col_action_return_pct", lang_code),
+        "confidence": t("col_action_confidence", lang_code),
+        "action": t("col_action_action", lang_code)
+    }
+    display_df = display_df.rename(columns=col_name_mapping)
+
+    price_label = t("col_action_price", lang_code)
+    vol_delta_label = t("col_action_vol_delta", lang_code)
+    loss_label = t("col_action_loss_pct", lang_code)
+    ret_label = t("col_action_return_pct", lang_code)
+    conf_label = t("col_action_confidence", lang_code)
+
+    if price_label in display_df.columns:
+        display_df[price_label] = display_df[price_label].apply(lambda x: f"${x:.2f}" if pd.notna(x) else "N/A")
+    if vol_delta_label in display_df.columns:
+        display_df[vol_delta_label] = display_df[vol_delta_label].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
+    if loss_label in display_df.columns:
+        display_df[loss_label] = display_df[loss_label].apply(lambda x: f"{x:.0f}%" if pd.notna(x) else "N/A")
+    if ret_label in display_df.columns:
+        display_df[ret_label] = display_df[ret_label].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
+    if conf_label in display_df.columns:
+        display_df[conf_label] = display_df[conf_label].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
+
+    st.dataframe(display_df, use_container_width=True, hide_index=True)
+
+    st.markdown(t("signal_legend_markdown", lang_code))
+
+    return filtered_df
+
+
 def render_report_view(nat: dict, params: dict, is_historical: bool = False, run_id: int = None):
     """Renders the analysis report view (metrics, heuristics, table, backtesting, charts, ticker details)."""
     df_quant = nat["quant"]
@@ -133,8 +335,36 @@ def render_report_view(nat: dict, params: dict, is_historical: bool = False, run
     final_df = renamed[[c for c in colonne if c in renamed.columns]]
     ret_col = t("col_med_ret_pct", lang_code)
     trend_col = t("col_trend", lang_code)
+    delta_col = t("col_delta_vol", lang_code)
+    loss_col = t("col_loss_pct", lang_code)
+    price_col = t("col_last_price", lang_code)
+
     if ret_col in final_df:
         final_df = final_df.sort_values(ret_col, ascending=False, na_position="last").reset_index(drop=True)
+
+    # Priority 1.1: Market Snapshot
+    st.divider()
+    snapshot_df = render_market_snapshot(
+        final_df=final_df,
+        trend_col=trend_col,
+        delta_col=delta_col,
+        loss_col=loss_col,
+        ret_col=ret_col,
+        lang_code=lang_code
+    )
+
+    # Priority 3: Actionable Signals Table
+    st.divider()
+    action_df = render_action_table(
+        final_df=final_df,
+        trend_col=trend_col,
+        delta_col=delta_col,
+        loss_col=loss_col,
+        ret_col=ret_col,
+        price_col=price_col,
+        lang_code=lang_code,
+        key_suffix=f"{run_id or 'live'}"
+    )
 
     # Backtesting / Walk-forward validation (temporal: point-in-time forecast vs realized return)
     st.subheader("🧪 Backtesting / Walk-forward")

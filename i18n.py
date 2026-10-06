@@ -110,6 +110,33 @@ TRANSLATIONS = {
         "col_vah": "VAH",
         "col_sentiment": "Sentiment News",
         "col_verdict": "Summary / Verdict",
+        # Market Snapshot & Actionable Signals
+        "market_snapshot_header": "📊 Market Snapshot",
+        "snapshot_total_stocks": "Total Stocks",
+        "snapshot_buy_signals": "BUY Signals",
+        "snapshot_sell_signals": "SELL Signals",
+        "snapshot_avg_delta": "Avg Vol Delta",
+        "snapshot_top_buy": "📈 Top Buy Pressure",
+        "snapshot_top_sell": "📉 Top Sell Pressure",
+        "action_table_header": "🎯 Actionable Signals",
+        "filter_by_action": "Filter by Action",
+        "sort_by": "Sort by",
+        "sort_action_confidence": "Action+Confidence",
+        "sort_confidence": "Confidence",
+        "sort_vol_delta": "Vol Delta",
+        "col_action_price": "Price",
+        "col_action_trend": "Trend",
+        "col_action_vol_delta": "Vol Δ %",
+        "col_action_loss_pct": "Loss %",
+        "col_action_return_pct": "Return %",
+        "col_action_confidence": "Confidence",
+        "col_action_action": "Action",
+        "all_filter": "All",
+        "signal_legend_markdown": """**Signal Legend:**
+- **BUY**: ≥3 buy signals → Strong bullish convergence
+- **SELL**: ≥3 sell signals → Strong bearish convergence
+- **WATCH**: 2 aligned signals → Monitor closely
+- **WAIT**: Ambiguous or conflicting signals → Insufficient conviction""",
         # Microstructure terms
         "above": "ABOVE",
         "below": "BELOW",
@@ -219,6 +246,33 @@ TRANSLATIONS = {
         "col_vah": "VAH",
         "col_sentiment": "Sentiment News",
         "col_verdict": "Sintesi / Verdetto",
+        # Market Snapshot & Actionable Signals
+        "market_snapshot_header": "📊 Panoramica del Mercato",
+        "snapshot_total_stocks": "Titoli Totali",
+        "snapshot_buy_signals": "Segnali BUY",
+        "snapshot_sell_signals": "Segnali SELL",
+        "snapshot_avg_delta": "Delta Vol Medio",
+        "snapshot_top_buy": "📈 Pressione Achat Top (BUY)",
+        "snapshot_top_sell": "📉 Pressione Vendita Top (SELL)",
+        "action_table_header": "🎯 Segnali Operativi (Actionable Signals)",
+        "filter_by_action": "Filtra per Azione",
+        "sort_by": "Ordina per",
+        "sort_action_confidence": "Azione+Confidenza",
+        "sort_confidence": "Confidenza",
+        "sort_vol_delta": "Delta Volumi",
+        "col_action_price": "Prezzo",
+        "col_action_trend": "Trend",
+        "col_action_vol_delta": "Vol Δ %",
+        "col_action_loss_pct": "Perdita %",
+        "col_action_return_pct": "Rendimento %",
+        "col_action_confidence": "Confidenza",
+        "col_action_action": "Azione",
+        "all_filter": "Tutti",
+        "signal_legend_markdown": """**Legenda Segnali:**
+- **BUY**: ≥3 segnali buy → Forte convergenza rialzista
+- **SELL**: ≥3 segnali sell → Forte convergenza ribassista
+- **WATCH**: 2 segnali allineati → Monitorare da vicino
+- **WAIT**: Segnali ambigui o divergenti → Convicimento insufficiente""",
         # Microstructure terms
         "above": "SOPRA",
         "below": "SOTTO",
@@ -328,6 +382,33 @@ TRANSLATIONS = {
         "col_vah": "VAH",
         "col_sentiment": "Noticias de Sentimiento",
         "col_verdict": "Resumen / Veredicto",
+        # Market Snapshot & Actionable Signals
+        "market_snapshot_header": "📊 Resumen del Mercado",
+        "snapshot_total_stocks": "Acciones Totales",
+        "snapshot_buy_signals": "Señales COMPRA",
+        "snapshot_sell_signals": "Señales VENTA",
+        "snapshot_avg_delta": "Delta Vol Promedio",
+        "snapshot_top_buy": "📈 Mayor Presión de Compra",
+        "snapshot_top_sell": "📉 Mayor Presión de Venta",
+        "action_table_header": "🎯 Señales Accionables",
+        "filter_by_action": "Filtrar por Acción",
+        "sort_by": "Ordenar por",
+        "sort_action_confidence": "Acción+Confianza",
+        "sort_confidence": "Confianza",
+        "sort_vol_delta": "Delta Volumen",
+        "col_action_price": "Precio",
+        "col_action_trend": "Tendencia",
+        "col_action_vol_delta": "Vol Δ %",
+        "col_action_loss_pct": "Pérdida %",
+        "col_action_return_pct": "Retorno %",
+        "col_action_confidence": "Confianza",
+        "col_action_action": "Acción",
+        "all_filter": "Todos",
+        "signal_legend_markdown": """**Leyenda de Señales:**
+- **BUY**: ≥3 señales de compra → Fuerte convergencia alcista
+- **SELL**: ≥3 señales de venta → Fuerte convergencia bajista
+- **WATCH**: 2 señales alineadas → Monitorear de cerca
+- **WAIT**: Señales ambiguas o conflictivas → Convicción insuficiente""",
         # Microstructure terms
         "above": "POR ENCIMA",
         "below": "POR DEBAJO",
@@ -437,6 +518,33 @@ TRANSLATIONS = {
         "col_vah": "VAH (价值区上限)",
         "col_sentiment": "新闻情绪摘要",
         "col_verdict": "综合判定结论",
+        # Market Snapshot & Actionable Signals
+        "market_snapshot_header": "📊 市场快照 (Market Snapshot)",
+        "snapshot_total_stocks": "分析股票总数",
+        "snapshot_buy_signals": "买入 (BUY) 信号",
+        "snapshot_sell_signals": "卖出 (SELL) 信号",
+        "snapshot_avg_delta": "平均量能 Delta",
+        "snapshot_top_buy": "📈 买盘动能 Top",
+        "snapshot_top_sell": "📉 卖盘动能 Top",
+        "action_table_header": "🎯 操作信号矩阵 (Actionable Signals)",
+        "filter_by_action": "按操作过滤",
+        "sort_by": "排序方式",
+        "sort_action_confidence": "操作+置信度",
+        "sort_confidence": "置信度",
+        "sort_vol_delta": "量能 Delta",
+        "col_action_price": "价格",
+        "col_action_trend": "趋势",
+        "col_action_vol_delta": "量能 Δ %",
+        "col_action_loss_pct": "亏损 %",
+        "col_action_return_pct": "收益率 %",
+        "col_action_confidence": "置信度",
+        "col_action_action": "操作",
+        "all_filter": "全部",
+        "signal_legend_markdown": """**信号图例说明：**
+- **BUY**: ≥3 个买入信号 → 强看涨共振
+- **SELL**: ≥3 个卖出信号 → 强看跌共振
+- **WATCH**: 2 个一致信号 → 密切关注
+- **WAIT**: 信号模糊或冲突 → 确信度不足""",
         # Microstructure terms
         "above": "上方",
         "below": "下方",
@@ -546,6 +654,33 @@ TRANSLATIONS = {
         "col_vah": "VAH",
         "col_sentiment": "Nouvelles / Sentiment",
         "col_verdict": "Synthèse / Verdict",
+        # Market Snapshot & Actionable Signals
+        "market_snapshot_header": "📊 Aperçu du Marché",
+        "snapshot_total_stocks": "Actions Totales",
+        "snapshot_buy_signals": "Signaux ACHAT",
+        "snapshot_sell_signals": "Signaux VENTE",
+        "snapshot_avg_delta": "Delta Vol Moyen",
+        "snapshot_top_buy": "📈 Plus Forte Pression d'Achat",
+        "snapshot_top_sell": "📉 Plus Forte Pression de Vente",
+        "action_table_header": "🎯 Signaux Actionnables",
+        "filter_by_action": "Filtrer par Action",
+        "sort_by": "Trier par",
+        "sort_action_confidence": "Action+Confiance",
+        "sort_confidence": "Confiance",
+        "sort_vol_delta": "Delta Volume",
+        "col_action_price": "Prix",
+        "col_action_trend": "Tendance",
+        "col_action_vol_delta": "Vol Δ %",
+        "col_action_loss_pct": "Perte %",
+        "col_action_return_pct": "Rendement %",
+        "col_action_confidence": "Confiance",
+        "col_action_action": "Action",
+        "all_filter": "Tous",
+        "signal_legend_markdown": """**Légende des Signaux :**
+- **BUY**: ≥3 signaux d'achat → Forte convergence haussière
+- **SELL**: ≥3 signaux de vente → Forte convergence baissière
+- **WATCH**: 2 signaux alignés → À surveiller de près
+- **WAIT**: Signaux ambigus ou contradictoires → Conviction insuffisante""",
         # Microstructure terms
         "above": "AU-DESSUS DE",
         "below": "AU-DESSOUS DE",
