@@ -166,6 +166,15 @@ name = "fdash-auth"
 
 Ensure `.streamlit/secrets.toml` is ignored in Git (already listed in `.gitignore`). Passwords must be bcrypt hashes generated via `streamlit-authenticator` (or equivalent) rather than plain text.
 
+#### Generating password hashes
+To generate a bcrypt hash for a new password, run this Python command in your terminal:
+
+```bash
+python3 -c "import streamlit_authenticator as stauth; print(stauth.Hasher.hash('YOUR_PASSWORD'))"
+```
+
+Replace `'YOUR_PASSWORD'` with your desired password and paste the generated hash into `.streamlit/secrets.toml`.
+
 ### Deployment on Streamlit Cloud
 Copy the content of `.streamlit/secrets.toml` into the **Advanced settings** panel when deploying on Streamlit Cloud.
 This secret configuration is managed by Streamlit Cloud and is never stored in Git.
