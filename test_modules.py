@@ -300,3 +300,67 @@ def test_db_persistence(tmp_path):
     deleted = db.delete_run(run_id, db_file=test_db)
     assert deleted
     assert len(db.list_runs(db_file=test_db)) == 0
+
+
+# ------------------------------------------------------------------ Price alerts
+import alerts_engine as ae
+
+
+def test_alert_rules_normalization_and_persistence(tmp_path):
+    df = pd.DataFrame({"symbol": [" aapl ", "", "MSFT", "NVDA"],
+                       "condition": [">=", ">=", "<=", "??"],
+                       "target": [200.0, 10.0, 0.0, 5.0],
+                       "active": [True, True, True, True]})
+    rules = ae.normalize_rules(df)
+    assert rules == [{"symbol": "AAPL", "condition": ">=", "target": 200.0, "active": True}]
+    path = str(tmp_path / "alerts.json")
+    ae.save_rules(df, path)
+    loaded = ae.load_rules(path)
+    assert ae.normalize_rules(loaded) == rules
+    assert ae.load_rules(str(tmp_path / "missing.json")).empty
+
+
+def test_alert_fires_once_and_rearms():
+    rules = [{"symbol": "AAA", "condition": ">=", "target": 100.0, "active": True},
+             {"symbol": "BBB", "condition": "<=", "target": 50.0, "active": True},
+             {"symbol": "CCC", "condition": ">=", "target": 1.0, "active": False}]
+    ev, fired = ae.evaluate_rules(rules, {"AAA": 99.0, "BBB": 60.0, "CCC": 5.0}, set())
+    assert ev == [] and fired == set()
+    ev, fired = ae.evaluate_rules(rules, {"AAA": 101.0, "BBB": 49.0, "CCC": 5.0}, fired)
+    assert {e["symbol"] for e in ev} == {"AAA", "BBB"}          # inactive rule never fires
+    ev, fired = ae.evaluate_rules(rules, {"AAA": 105.0, "BBB": 48.0}, fired)
+    assert ev == []                                              # no repeated alarm every minute
+    ev, fired = ae.evaluate_rules(rules, {"AAA": 95.0, "BBB": 48.0}, fired)
+    assert ev == [] and ae.rule_key(rules[0]) not in fired       # condition false -> re-armed
+    ev, fired = ae.evaluate_rules(rules, {"AAA": 100.0, "BBB": 48.0}, fired)
+    assert [e["symbol"] for e in ev] == ["AAA"]                  # fires again
+    ev, fired = ae.evaluate_rules(rules, {}, fired)              # missing data keeps state
+    assert ae.rule_key(rules[0]) in fired
+
+
+def test_fetch_last_prices_single_batched_call(monkeypatch):
+    calls = []
+    idx = pd.date_range("2026-10-06 14:30", periods=3, freq="min", tz="UTC")
+    cols = pd.MultiIndex.from_product([["Close"], ["AAA", "BBB"]])
+    frame = pd.DataFrame([[1.0, 10.0], [2.0, 20.0], [3.0, np.nan]], index=idx, columns=cols)
+
+    def fake_download(symbols, **kw):
+        calls.append(symbols)
+        return frame
+
+    monkeypatch.setattr(ae.yf, "download", fake_download)
+    prices = ae.fetch_last_prices(["aaa", "BBB", "AAA", "ZZZ"])
+    assert len(calls) == 1 and calls[0] == ["AAA", "BBB", "ZZZ"]  # one call for all symbols
+    assert prices == {"AAA": 3.0, "BBB": 20.0}                     # last valid close, unknown symbol skipped
+
+    monkeypatch.setattr(ae.yf, "download", lambda *a, **k: pd.DataFrame())
+    assert ae.fetch_last_prices(["AAA"]) == {}
+
+
+def test_alert_beep_wav_and_i18n():
+    import wave, io
+    with wave.open(io.BytesIO(ae.make_beep_wav())) as w:
+        assert w.getnchannels() == 1 and w.getnframes() > 0
+    for code in LANGUAGES:
+        for key in ("nav_analysis", "nav_alerts", "alerts_title", "alerts_start_button", "alert_fired_body"):
+            assert t(key, code) != key

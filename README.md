@@ -89,7 +89,7 @@ You can run the application in an isolated and automated environment using **Doc
 
 ## ⚙️ Application Usage & Sidebar Menu Customizations
 
-The application sidebar allows you to customize every aspect of the quantitative forecast, volume microstructure analysis, backtesting, and UI language.
+The application sidebar allows you to customize every aspect of the quantitative forecast, volume microstructure analysis, backtesting, price alerts, and UI language.
 
 ### 🌐 Options & Language Selection
 - **Language / Lingua:** Switch the application interface between 5 supported languages:
@@ -98,6 +98,17 @@ The application sidebar allows you to customize every aspect of the quantitative
   - Spanish (`es`)
   - Chinese (`zh`)
   - French (`fr`)
+
+### 🔔 Sections: Analysis & Alerts
+
+At the top of the left sidebar a **Section** selector switches between **📊 Analysis** (the existing dashboard) and **🔔 Alerts** (price monitoring). You can switch at any time: the analysis results stay in memory and the alert monitor keeps running in the background of the session.
+
+**Alerts section**
+- Configure any number of rules in the table: *Symbol*, *Condition* (`>=` alarm when the price rises to/above the target, `<=` when it falls to/below), *Target price*, *Active*. Rules are saved to `alerts_config.json`.
+- Choose **🔊 Sound alarm** and/or **💬 Notification** (in-app toast + browser notification: click *Enable browser notifications* once).
+- **▶ Start monitoring**: the app makes **one batched call per interval** to the finance service (Yahoo Finance, 1-minute bars) for all the active symbols. The interval is `POLL_INTERVAL_SECONDS` in `alerts_engine.py` (default 60, or env var `FDASH_ALERT_POLL_SECONDS`).
+- An alarm fires once when the condition becomes true and re-arms when it becomes false again (no repeated alarm every minute). Fired alarms are listed in the log.
+- Keep the browser tab open: monitoring runs while the session is alive. Click *Start monitoring* at least once so the browser allows the alarm sound.
 
 ### 📊 Universe Configuration
 - **Stocks Universe Selection:** Choose between two modes:
@@ -152,6 +163,8 @@ pytest test_modules.py
 .
 ├── .github/                 # GitHub Actions CI workflows (automated unit testing)
 ├── app.py                   # Main Streamlit dashboard interface & navigation tabs
+├── alerts_engine.py         # Price alerts logic: rules, batched price fetch, polling interval, alarm sound
+├── alerts_ui.py             # Streamlit UI for the Alerts section + background monitor
 ├── quant_engine.py          # TimesFM-3 quantitative pipeline (universe, prices, log returns, quantiles)
 ├── volume_engine.py         # Volume pipeline (buy/sell, Volume Profile, value area, POC/VWAP)
 ├── heuristic_enrichment.py  # Local heuristic qualitative enrichment module
