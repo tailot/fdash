@@ -11,6 +11,7 @@ from heuristic_enrichment import genera_analisi_euristica
 from backtesting import backtest_temporale, riepilogo_backtest_temporale
 from i18n import t, LANGUAGES
 from db_engine import save_run, list_runs, get_run, delete_run
+from alerts_ui import init_alerts_state, render_alert_monitor, render_alerts_section
 
 # Page config
 st.set_page_config(page_title="Master Financial Analysis Dashboard", page_icon="📈", layout="wide")
@@ -20,9 +21,20 @@ st.sidebar.header("⚙️ Options")
 lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAGES.keys()),
                                 format_func=lambda x: LANGUAGES[x], index=0)
 
+# Section navigation (switchable at any time; analysis state is kept in st.session_state)
+SECTIONS = ["analysis", "alerts"]
+st.sidebar.radio(t("nav_label", lang_code), SECTIONS, key="section",
+                 format_func=lambda k: t(f"nav_{k}", lang_code))
+section = st.session_state["section"]
+
+# Alerts monitor: rendered in every section, so price checks continue while the user is in "Analysis"
+init_alerts_state()
+with st.sidebar:
+    render_alert_monitor(lang_code)
+st.sidebar.divider()
+
 # Localized page titles
 st.title(t("app_title", lang_code))
-st.markdown(t("app_subtitle", lang_code))
 
 
 @st.cache_resource(show_spinner=False)
@@ -490,120 +502,132 @@ def render_report_view(nat: dict, params: dict, is_historical: bool = False, run
     st.caption(t("footer_disclaimer", lang_code))
 
 
-# Top Navigation Tabs
-tab_live, tab_archive = st.tabs([t("tab_live_analysis", lang_code), t("tab_history_archive", lang_code)])
+def render_analysis_section():
+    """Analysis section: live analysis + history archive."""
+    st.markdown(t("app_subtitle", lang_code))
 
-with tab_live:
-    # ---------------------------------------------------------------------------------------------- sidebar
-    st.sidebar.subheader(t("universe_header", lang_code))
-    universo_label = st.sidebar.radio(t("universe_radio", lang_code),
-                                      [t("manual_list", lang_code), t("top_nasdaq", lang_code)], index=0)
-    is_manual = (universo_label == t("manual_list", lang_code))
+    # Top Navigation Tabs
+    tab_live, tab_archive = st.tabs([t("tab_live_analysis", lang_code), t("tab_history_archive", lang_code)])
 
-    if is_manual:
-        input_tickers = st.sidebar.text_input(t("tickers_input", lang_code), "MSTR, AAPL, NVDA, TSLA, MSFT")
-        n_top = 100
-    else:
-        input_tickers = ""
-        n_top = st.sidebar.slider(t("n_stocks_slider", lang_code), 20, 100, 100, step=10)
+    with tab_live:
+        # ---------------------------------------------------------------------------------------------- sidebar
+        st.sidebar.subheader(t("universe_header", lang_code))
+        universo_label = st.sidebar.radio(t("universe_radio", lang_code),
+                                          [t("manual_list", lang_code), t("top_nasdaq", lang_code)], index=0)
+        is_manual = (universo_label == t("manual_list", lang_code))
 
-    st.sidebar.subheader(t("forecast_header", lang_code))
-    horizon = st.sidebar.slider(t("horizon_slider", lang_code), 1, 20, HORIZON)
-    soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
-                                            help=t("trend_threshold_help", lang_code))
-    usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=True)
+        if is_manual:
+            input_tickers = st.sidebar.text_input(t("tickers_input", lang_code), "MSTR, AAPL, NVDA, TSLA, MSFT")
+            n_top = 100
+        else:
+            input_tickers = ""
+            n_top = st.sidebar.slider(t("n_stocks_slider", lang_code), 20, 100, 100, step=10)
 
-    st.sidebar.subheader(t("volume_header", lang_code))
-    metodo = st.sidebar.selectbox(t("buy_sell_method", lang_code), ["clv", "candela", "tick"], index=0)
-    giorni_intra = st.sidebar.slider(t("analyzed_days", lang_code), 1, 5, 1)
-    data_fine = st.sidebar.text_input(t("end_date_input", lang_code), "")
-    solo_regolari = st.sidebar.checkbox(t("regular_hours_only", lang_code), value=True)
-    soglia_eq = st.sidebar.number_input(t("eq_threshold_label", lang_code), 0.0, 20.0, 2.0, 0.5)
-    n_bin = st.sidebar.slider(t("n_bins_slider", lang_code), 10, 100, 30, step=5)
-    area_valore = st.sidebar.slider(t("value_area_slider", lang_code), 50, 90, 70, step=5)
-    prezzo_rif = st.sidebar.number_input(t("ref_price_label", lang_code), 0.0, value=0.0)
+        st.sidebar.subheader(t("forecast_header", lang_code))
+        horizon = st.sidebar.slider(t("horizon_slider", lang_code), 1, 20, HORIZON)
+        soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
+                                                help=t("trend_threshold_help", lang_code))
+        usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=True)
 
-    if st.sidebar.button(t("run_analysis_button", lang_code), type="primary"):
-        manuali = [t_item.strip().upper() for t_item in input_tickers.split(",") if t_item.strip()] or None
-        forecaster = get_forecaster() if usa_tfm else None
-        with st.spinner(t("download_prices_spinner", lang_code)):
-            try:
-                dfq, info = calcola_previsioni(manuali, n_tickers=n_top, horizon=horizon,
-                                                forecaster=forecaster, soglia_trend=soglia_trend)
-            except Exception as e:
-                st.error(t("forecast_failed", lang_code).format(e))
-                st.stop()
+        st.sidebar.subheader(t("volume_header", lang_code))
+        metodo = st.sidebar.selectbox(t("buy_sell_method", lang_code), ["clv", "candela", "tick"], index=0)
+        giorni_intra = st.sidebar.slider(t("analyzed_days", lang_code), 1, 5, 1)
+        data_fine = st.sidebar.text_input(t("end_date_input", lang_code), "")
+        solo_regolari = st.sidebar.checkbox(t("regular_hours_only", lang_code), value=True)
+        soglia_eq = st.sidebar.number_input(t("eq_threshold_label", lang_code), 0.0, 20.0, 2.0, 0.5)
+        n_bin = st.sidebar.slider(t("n_bins_slider", lang_code), 10, 100, 30, step=5)
+        area_valore = st.sidebar.slider(t("value_area_slider", lang_code), 50, 90, 70, step=5)
+        prezzo_rif = st.sidebar.number_input(t("ref_price_label", lang_code), 0.0, value=0.0)
 
-        righe_vol, errori = [], []
-        barra = st.progress(0.0)
-        stato = st.empty()
-        for i, t_sym in enumerate(dfq["Ticker"]):
-            stato.text(t("min_volume_status", lang_code).format(t_sym, i + 1, len(dfq)))
-            try:
-                r = calcola_microstruttura_ticker(t_sym, giorni=giorni_intra, data_fine=data_fine, metodo=metodo,
-                                                  solo_orari_regolari=solo_regolari, soglia_equilibrio=soglia_eq,
-                                                  n_bin=n_bin, prezzo_riferimento=prezzo_rif,
-                                                  area_valore_pct=area_valore)
-                righe_vol.append(r)
-            except Exception as e:
-                errori.append(f"{t_sym}: {e}")
-            barra.progress((i + 1) / len(dfq))
-        stato.empty()
+        if st.sidebar.button(t("run_analysis_button", lang_code), type="primary"):
+            manuali = [t_item.strip().upper() for t_item in input_tickers.split(",") if t_item.strip()] or None
+            forecaster = get_forecaster() if usa_tfm else None
+            with st.spinner(t("download_prices_spinner", lang_code)):
+                try:
+                    dfq, info = calcola_previsioni(manuali, n_tickers=n_top, horizon=horizon,
+                                                    forecaster=forecaster, soglia_trend=soglia_trend)
+                except Exception as e:
+                    st.error(t("forecast_failed", lang_code).format(e))
+                    st.stop()
 
-        nat_data = {"quant": dfq, "info": info, "vol": righe_vol, "errori": errori, "metodo": metodo}
-        params_data = {
-            "is_manual": is_manual, "input_tickers": input_tickers, "n_top": n_top,
-            "horizon": horizon, "soglia_trend": soglia_trend, "usa_tfm": usa_tfm,
-            "metodo": metodo, "giorni_intra": giorni_intra, "data_fine": data_fine,
-            "solo_regolari": solo_regolari, "soglia_eq": soglia_eq, "n_bin": n_bin,
-            "area_valore": area_valore, "prezzo_rif": prezzo_rif
-        }
-        st.session_state["nativo"] = nat_data
-        st.session_state["params"] = params_data
+            righe_vol, errori = [], []
+            barra = st.progress(0.0)
+            stato = st.empty()
+            for i, t_sym in enumerate(dfq["Ticker"]):
+                stato.text(t("min_volume_status", lang_code).format(t_sym, i + 1, len(dfq)))
+                try:
+                    r = calcola_microstruttura_ticker(t_sym, giorni=giorni_intra, data_fine=data_fine, metodo=metodo,
+                                                      solo_orari_regolari=solo_regolari, soglia_equilibrio=soglia_eq,
+                                                      n_bin=n_bin, prezzo_riferimento=prezzo_rif,
+                                                      area_valore_pct=area_valore)
+                    righe_vol.append(r)
+                except Exception as e:
+                    errori.append(f"{t_sym}: {e}")
+                barra.progress((i + 1) / len(dfq))
+            stato.empty()
 
-        # Automatically persist run to SQLite database
-        run_id = save_run(nat_data, params_data)
-        st.session_state["last_saved_run_id"] = run_id
+            nat_data = {"quant": dfq, "info": info, "vol": righe_vol, "errori": errori, "metodo": metodo}
+            params_data = {
+                "is_manual": is_manual, "input_tickers": input_tickers, "n_top": n_top,
+                "horizon": horizon, "soglia_trend": soglia_trend, "usa_tfm": usa_tfm,
+                "metodo": metodo, "giorni_intra": giorni_intra, "data_fine": data_fine,
+                "solo_regolari": solo_regolari, "soglia_eq": soglia_eq, "n_bin": n_bin,
+                "area_valore": area_valore, "prezzo_rif": prezzo_rif
+            }
+            st.session_state["nativo"] = nat_data
+            st.session_state["params"] = params_data
 
-    nat = st.session_state.get("nativo")
-    params = st.session_state.get("params", {})
+            # Automatically persist run to SQLite database
+            run_id = save_run(nat_data, params_data)
+            st.session_state["last_saved_run_id"] = run_id
 
-    if not nat:
-        st.info(t("sidebar_prompt", lang_code))
-    else:
-        if st.session_state.get("last_saved_run_id"):
-            st.success(t("saved_to_db_notice", lang_code).format(st.session_state["last_saved_run_id"]))
-        render_report_view(nat, params, is_historical=False)
+        nat = st.session_state.get("nativo")
+        params = st.session_state.get("params", {})
+
+        if not nat:
+            st.info(t("sidebar_prompt", lang_code))
+        else:
+            if st.session_state.get("last_saved_run_id"):
+                st.success(t("saved_to_db_notice", lang_code).format(st.session_state["last_saved_run_id"]))
+            render_report_view(nat, params, is_historical=False)
 
 
-with tab_archive:
-    st.header(t("archive_title", lang_code))
-    st.markdown(t("archive_subtitle", lang_code))
+    with tab_archive:
+        st.header(t("archive_title", lang_code))
+        st.markdown(t("archive_subtitle", lang_code))
 
-    historical_runs = list_runs()
-    if not historical_runs:
-        st.info(t("no_history_msg", lang_code))
-    else:
-        run_options = {r["id"]: f"#{r['id']} - {r['run_label']}" for r in historical_runs}
-        selected_id = st.selectbox(
-            t("select_run_label", lang_code),
-            options=list(run_options.keys()),
-            format_func=lambda x: run_options[x]
-        )
+        historical_runs = list_runs()
+        if not historical_runs:
+            st.info(t("no_history_msg", lang_code))
+        else:
+            run_options = {r["id"]: f"#{r['id']} - {r['run_label']}" for r in historical_runs}
+            selected_id = st.selectbox(
+                t("select_run_label", lang_code),
+                options=list(run_options.keys()),
+                format_func=lambda x: run_options[x]
+            )
 
-        if selected_id:
-            run_data = get_run(selected_id)
-            if run_data:
-                col_info, col_del = st.columns([3, 1])
-                with col_info:
-                    st.caption(f"**ID:** {selected_id} | **Timestamp:** {run_data['metadata']['timestamp']} | "
-                               f"**Universe:** {run_data['metadata']['universe_type']} | "
-                               f"**Model:** {run_data['metadata']['model_used']}")
-                with col_del:
-                    if st.button(t("delete_run_button", lang_code), key=f"del_{selected_id}"):
-                        delete_run(selected_id)
-                        st.success(t("run_deleted_success", lang_code).format(selected_id))
-                        st.rerun()
+            if selected_id:
+                run_data = get_run(selected_id)
+                if run_data:
+                    col_info, col_del = st.columns([3, 1])
+                    with col_info:
+                        st.caption(f"**ID:** {selected_id} | **Timestamp:** {run_data['metadata']['timestamp']} | "
+                                   f"**Universe:** {run_data['metadata']['universe_type']} | "
+                                   f"**Model:** {run_data['metadata']['model_used']}")
+                    with col_del:
+                        if st.button(t("delete_run_button", lang_code), key=f"del_{selected_id}"):
+                            delete_run(selected_id)
+                            st.success(t("run_deleted_success", lang_code).format(selected_id))
+                            st.rerun()
 
-                st.divider()
-                render_report_view(run_data["nativo"], run_data["params"], is_historical=True, run_id=selected_id)
+                    st.divider()
+                    render_report_view(run_data["nativo"], run_data["params"], is_historical=True, run_id=selected_id)
+
+
+# Section routing
+if section == "alerts":
+    render_alerts_section(lang_code)
+else:
+    st.session_state["alerts_editor_base"] = None  # editor is rebuilt from saved rules when re-entering "Alerts"
+    render_analysis_section()
