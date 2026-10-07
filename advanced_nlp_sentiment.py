@@ -81,19 +81,28 @@ NEUTRAL_ZONE = 0.1
 
 def _patch_transformers_dummy_modules():
     import sys
-    for name, m in list(sys.modules.items()):
-        if name.startswith("transformers.") and hasattr(m, "__getattr__"):
-            orig_getattr = m.__getattr__
-            if getattr(orig_getattr, "_is_safe", False):
-                continue
-            def make_safe_getattr(og, mod_name):
-                def safe_getattr(attr):
-                    if attr.startswith("__"):
-                        raise AttributeError(f"module {mod_name} has no attribute {attr}")
-                    return og(attr)
-                safe_getattr._is_safe = True
-                return safe_getattr
-            m.__getattr__ = make_safe_getattr(orig_getattr, name)
+    try:
+        for name, m in list(sys.modules.items()):
+            if name.startswith("transformers."):
+                try:
+                    orig_getattr = getattr(m, "__getattr__", None)
+                    if orig_getattr is None or getattr(orig_getattr, "_is_safe", False):
+                        continue
+                    def make_safe_getattr(og, mod_name):
+                        def safe_getattr(attr):
+                            if attr.startswith("__"):
+                                raise AttributeError(f"module {mod_name} has no attribute {attr}")
+                            try:
+                                return og(attr)
+                            except Exception as e:
+                                raise AttributeError(f"module {mod_name} has no attribute {attr}") from e
+                        safe_getattr._is_safe = True
+                        return safe_getattr
+                    m.__getattr__ = make_safe_getattr(orig_getattr, name)
+                except Exception:
+                    pass
+    except Exception:
+        pass
 
 
 class SentimentAnalyzer:
