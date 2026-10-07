@@ -156,7 +156,7 @@ def render_market_snapshot(final_df: pd.DataFrame, trend_col: str, delta_col: st
         top_buy = top_buy.copy()
         top_buy.columns = ["Ticker", t("col_action_vol_delta", lang_code), t("col_action_trend", lang_code), t("col_action_action", lang_code)]
         top_buy[t("col_action_vol_delta", lang_code)] = top_buy[t("col_action_vol_delta", lang_code)].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
-        st.dataframe(top_buy, use_container_width=True, hide_index=True)
+        st.dataframe(top_buy, width="stretch", hide_index=True)
 
     with right_col:
         st.markdown(f"#### {t('snapshot_top_sell', lang_code)}")
@@ -168,7 +168,7 @@ def render_market_snapshot(final_df: pd.DataFrame, trend_col: str, delta_col: st
         top_sell = top_sell.copy()
         top_sell.columns = ["Ticker", t("col_action_vol_delta", lang_code), t("col_action_trend", lang_code), t("col_action_action", lang_code)]
         top_sell[t("col_action_vol_delta", lang_code)] = top_sell[t("col_action_vol_delta", lang_code)].apply(lambda x: f"{x:+.1f}%" if pd.notna(x) else "N/A")
-        st.dataframe(top_sell, use_container_width=True, hide_index=True)
+        st.dataframe(top_sell, width="stretch", hide_index=True)
 
     st.divider()
     return snapshot_df
@@ -281,7 +281,7 @@ def render_action_table(final_df: pd.DataFrame, trend_col: str, delta_col: str,
     if conf_label in display_df.columns:
         display_df[conf_label] = display_df[conf_label].apply(lambda x: f"{x:.1%}" if pd.notna(x) else "N/A")
 
-    st.dataframe(display_df, use_container_width=True, hide_index=True)
+    st.dataframe(display_df, width="stretch", hide_index=True)
 
     st.markdown(t("signal_legend_markdown", lang_code))
 
@@ -453,7 +453,7 @@ def render_report_view(nat: dict, params: dict, is_historical: bool = False, run
             b4.metric("Avg P&L / signal", f"{riepilogo['avg_pnl_active']:.2%}" if riepilogo["n_active"] else "N/A",
                       delta=f"{riepilogo['avg_pnl_active'] - riepilogo['avg_return_all']:.2%} vs buy&hold"
                       if riepilogo["n_active"] else None)
-            st.dataframe(per_segnale, use_container_width=True)
+            st.dataframe(per_segnale, width="stretch")
             st.caption("Few observations = noisy metrics. Statistical analysis, not investment advice.")
 
     c1, c2, c3, c4 = st.columns(4)
