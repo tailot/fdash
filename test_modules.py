@@ -366,3 +366,18 @@ def test_alert_beep_wav_and_i18n():
     for code in LANGUAGES:
         for key in ("nav_analysis", "nav_alerts", "alerts_title", "alerts_start_button", "alert_fired_body"):
             assert t(key, code) != key
+
+
+def test_auth_config_check(monkeypatch):
+    from app import _has_auth_config
+    import streamlit as st
+
+    monkeypatch.setattr(st, "secrets", {})
+    assert not _has_auth_config()
+
+    mock_secrets = {
+        "credentials": {"usernames": {}},
+        "cookie": {"name": "test", "key": "secret", "expiration_days": 30}
+    }
+    monkeypatch.setattr(st, "secrets", mock_secrets)
+    assert _has_auth_config()

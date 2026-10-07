@@ -26,39 +26,50 @@ def _to_plain_dict(obj):
         return [_to_plain_dict(x) for x in obj]
     return obj
 
-credentials_dict = _to_plain_dict(st.secrets["credentials"])
 
-authenticator = stauth.Authenticate(
-    credentials_dict,
-    st.secrets["cookie"]["name"],
-    st.secrets["cookie"]["key"],
-    st.secrets["cookie"]["expiration_days"]
-)
+def _has_auth_config():
+    try:
+        return "credentials" in st.secrets and "cookie" in st.secrets
+    except Exception:
+        return False
 
-authenticator.login(location="main")
 
-if st.session_state.get("authentication_status") is False:
-    st.error("Username o password non validi.")
-    st.stop()
-elif st.session_state.get("authentication_status") is None:
-    st.warning("Inserisci le credenziali per accedere.")
-    st.stop()
+if _has_auth_config():
+    credentials_dict = _to_plain_dict(st.secrets["credentials"])
 
-# Authenticated session
-authenticator.logout(location="sidebar")
+    authenticator = stauth.Authenticate(
+        credentials_dict,
+        st.secrets["cookie"]["name"],
+        st.secrets["cookie"]["key"],
+        st.secrets["cookie"]["expiration_days"]
+    )
+
+    authenticator.login(location="main")
+
+    if st.session_state.get("authentication_status") is False:
+        st.error("Username o password non validi.")
+        st.stop()
+    elif st.session_state.get("authentication_status") is None:
+        st.warning("Inserisci le credenziali per accedere.")
+        st.stop()
+
+    # Authenticated session
+    authenticator.logout(location="sidebar")
+else:
+    st.session_state.setdefault("name", "User")
 
 # Sidebar - Language Selection
 st.sidebar.header("⚙️ Options")
 lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAGES.keys()),
                                 format_func=lambda x: LANGUAGES[x], index=0)
 
-st.sidebar.write(t("welcome", lang_code).format(st.session_state['name']))
+st.sidebar.write(t("welcome", lang_code).format(st.session_state.get('name', 'User')))
 
 # Section navigation (switchable at any time; analysis state is kept in st.session_state)
 SECTIONS = ["analysis", "alerts"]
 st.sidebar.radio(t("nav_label", lang_code), SECTIONS, key="section",
                  format_func=lambda k: t(f"nav_{k}", lang_code))
-section = st.session_state["section"]
+section = st.session_state.get("section", "analysis")
 
 # Alerts monitor: rendered in every section, so price checks continue while the user is in "Analysis"
 init_alerts_state()
