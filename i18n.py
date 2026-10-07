@@ -183,6 +183,7 @@ TRANSLATIONS = {
         "alerts_no_data": "The finance service returned no data.",
         "alert_fired_title": "🔔 Alert {}",
         "alert_fired_body": "{} is at {:.2f} ({} {:.2f})",
+        "welcome": "Welcome, {}!",
     },
     "it": {
         "page_title": "Dashboard Master di Analisi Finanziaria",
@@ -355,6 +356,7 @@ TRANSLATIONS = {
         "alerts_no_data": "Il servizio finanziario non ha restituito dati.",
         "alert_fired_title": "🔔 Allarme {}",
         "alert_fired_body": "{} è a {:.2f} ({} {:.2f})",
+        "welcome": "Benvenuto, {}!",
     },
     "es": {
         "page_title": "Panel Maestro de Análisis Financiero",
@@ -527,6 +529,7 @@ TRANSLATIONS = {
         "alerts_no_data": "El servicio financiero no devolvió datos.",
         "alert_fired_title": "🔔 Alarma {}",
         "alert_fired_body": "{} está en {:.2f} ({} {:.2f})",
+        "welcome": "¡Bienvenido, {}!",
     },
     "zh": {
         "page_title": "金融分析主控板",
@@ -699,6 +702,7 @@ TRANSLATIONS = {
         "alerts_no_data": "金融服务未返回数据。",
         "alert_fired_title": "🔔 警报 {}",
         "alert_fired_body": "{} 当前为 {:.2f}（{} {:.2f}）",
+        "welcome": "欢迎，{}！",
     },
     "fr": {
         "page_title": "Tableau de Bord Maître d'Analyse Financière",
@@ -871,6 +875,7 @@ TRANSLATIONS = {
         "alerts_no_data": "Le service financier n'a renvoyé aucune donnée.",
         "alert_fired_title": "🔔 Alerte {}",
         "alert_fired_body": "{} est à {:.2f} ({} {:.2f})",
+        "welcome": "Bienvenue, {} !",
     },
 }
 
