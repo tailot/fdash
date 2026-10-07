@@ -3,3 +3,4 @@ __pycache__/
 .pytest_cache/
 streamlit.log
 alerts_config.json
+.streamlit/secrets.toml

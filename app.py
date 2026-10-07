@@ -13,8 +13,40 @@ from i18n import t, LANGUAGES
 from db_engine import save_run, list_runs, get_run, delete_run
 from alerts_ui import init_alerts_state, render_alert_monitor, render_alerts_section
 
+import streamlit_authenticator as stauth
+
 # Page config
 st.set_page_config(page_title="Master Financial Analysis Dashboard", page_icon="📈", layout="wide")
+
+# Authentication Guard
+def _to_plain_dict(obj):
+    if hasattr(obj, "items"):
+        return {k: _to_plain_dict(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [_to_plain_dict(x) for x in obj]
+    return obj
+
+credentials_dict = _to_plain_dict(st.secrets["credentials"])
+
+authenticator = stauth.Authenticate(
+    credentials_dict,
+    st.secrets["cookie"]["name"],
+    st.secrets["cookie"]["key"],
+    st.secrets["cookie"]["expiration_days"]
+)
+
+authenticator.login(location="main")
+
+if st.session_state.get("authentication_status") is False:
+    st.error("Username o password non validi.")
+    st.stop()
+elif st.session_state.get("authentication_status") is None:
+    st.warning("Inserisci le credenziali per accedere.")
+    st.stop()
+
+# Authenticated session
+authenticator.logout(location="sidebar")
+st.sidebar.write(f"Benvenuto, {st.session_state['name']}")
 
 # Sidebar - Language Selection
 st.sidebar.header("⚙️ Options")

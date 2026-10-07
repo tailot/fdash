@@ -147,6 +147,31 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 
 ---
 
+## 🔐 Authentication and Secrets Management
+
+fdash uses **Streamlit Authenticator** to protect access to the dashboard.
+
+### Local Development
+Create `.streamlit/secrets.toml` with credentials and cookie settings:
+
+```toml
+[credentials]
+usernames = { "admin" = { name = "Administrator", password = "$2b$12$hcGLxU1A/VG.7QJxpEhXr.MR1LVgrPoSrgko6R9kT3soe5ZFiR.Ie" } }
+
+[cookie]
+expiration_days = 30
+key = "un-key-segreto-molto-lungo-e-casuale"
+name = "fdash-auth"
+```
+
+Ensure `.streamlit/secrets.toml` is ignored in Git (already listed in `.gitignore`). Passwords must be bcrypt hashes generated via `streamlit-authenticator` (or equivalent) rather than plain text.
+
+### Deployment on Streamlit Cloud
+Copy the content of `.streamlit/secrets.toml` into the **Advanced settings** panel when deploying on Streamlit Cloud.
+This secret configuration is managed by Streamlit Cloud and is never stored in Git.
+
+---
+
 ## 🧪 Running Unit Tests
 
 The tests are offline (synthetic data and simulated forecaster, no access to Yahoo/Nasdaq) and verify the calculation formulas:
