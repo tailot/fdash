@@ -46,12 +46,13 @@ elif st.session_state.get("authentication_status") is None:
 
 # Authenticated session
 authenticator.logout(location="sidebar")
-st.sidebar.write(f"Benvenuto, {st.session_state['name']}")
 
 # Sidebar - Language Selection
 st.sidebar.header("⚙️ Options")
 lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAGES.keys()),
                                 format_func=lambda x: LANGUAGES[x], index=0)
+
+st.sidebar.write(t("welcome", lang_code).format(st.session_state['name']))
 
 # Section navigation (switchable at any time; analysis state is kept in st.session_state)
 SECTIONS = ["analysis", "alerts"]

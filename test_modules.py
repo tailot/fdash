@@ -161,6 +161,8 @@ def test_i18n_translation_keys():
     for code in ("en", "it", "es", "zh", "fr"):
         assert t("app_title", code) != ""
         assert t("col_last_price", code) != ""
+        assert t("welcome", code) != ""
+        assert t("welcome", code).format("User") != ""
 
 
 def test_heuristic_enrichment_multilingual():
