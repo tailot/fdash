@@ -12,6 +12,7 @@ from backtesting import backtest_temporale, riepilogo_backtest_temporale
 from i18n import t, LANGUAGES
 from db_engine import save_run, list_runs, get_run, delete_run
 from alerts_ui import init_alerts_state, render_alert_monitor, render_alerts_section
+from discover_ui import render_discover_section
 
 import streamlit_authenticator as stauth
 
@@ -66,12 +67,12 @@ lang_code = st.sidebar.selectbox("🌐 Language / Lingua:", options=list(LANGUAG
 st.sidebar.write(t("welcome", lang_code).format(st.session_state.get('name', 'User')))
 
 # Section navigation (switchable at any time; analysis state is kept in st.session_state)
-SECTIONS = ["analysis", "alerts"]
+SECTIONS = ["analysis", "discover", "alerts"]
 st.sidebar.radio(t("nav_label", lang_code), SECTIONS, key="section",
                  format_func=lambda k: t(f"nav_{k}", lang_code))
 section = st.session_state.get("section", "analysis")
 
-# Alerts monitor: rendered in every section, so price checks continue while the user is in "Analysis"
+# Alerts monitor: rendered in every section, so price checks continue while the user is in "Analysis" or "Discover"
 init_alerts_state()
 with st.sidebar:
     render_alert_monitor(lang_code)
@@ -672,6 +673,8 @@ def render_analysis_section():
 # Section routing
 if section == "alerts":
     render_alerts_section(lang_code)
+elif section == "discover":
+    render_discover_section(lang_code)
 else:
     st.session_state["alerts_editor_base"] = None  # editor is rebuilt from saved rules when re-entering "Alerts"
     render_analysis_section()

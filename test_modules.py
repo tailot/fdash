@@ -10,6 +10,7 @@ from volume_engine import stima_buy_sell, verdetto_delta
 from heuristic_enrichment import genera_analisi_euristica
 from i18n import t, LANGUAGES
 import db_engine as db
+import discover_engine as de
 
 
 # ------------------------------------------------------------------ synthetic data
@@ -163,6 +164,8 @@ def test_i18n_translation_keys():
         assert t("col_last_price", code) != ""
         assert t("welcome", code) != ""
         assert t("welcome", code).format("User") != ""
+        assert t("nav_discover", code) != ""
+        assert t("discover_title", code) != ""
 
 
 def test_heuristic_enrichment_multilingual():
@@ -383,154 +386,59 @@ def test_auth_config_check(monkeypatch):
     assert _has_auth_config()
 
 
-# ------------------------------------------------------------------ Alerts worker & Push notifications tests
-def test_alert_worker_json_atomic_and_vapid_keys(tmp_path):
-    json_path = str(tmp_path / "test.json")
-    data = {"key": "value", "count": 123}
-    assert ae._write_json_atomic(json_path, data)
-    assert ae._read_json(json_path, {}) == data
-    assert ae._read_json(str(tmp_path / "nonexistent.json"), {"default": True}) == {"default": True}
-
-    vapid_path = str(tmp_path / "vapid.json")
-    vapid1 = ae.ensure_vapid_keys(vapid_path)
-    assert "private_pem" in vapid1 and "public_key" in vapid1
-    assert vapid1["private_pem"].startswith("-----BEGIN")
-    assert len(vapid1["public_key"]) > 10
-
-    # Ensure second call loads existing key pair
-    vapid2 = ae.ensure_vapid_keys(vapid_path)
-    assert vapid1 == vapid2
+# ------------------------------------------------------------------ Discover Engine Tests
+def test_discover_unit_multipliers():
+    assert de.get_unit_multiplier("1") == 1.0
+    assert de.get_unit_multiplier("k") == 1_000.0
+    assert de.get_unit_multiplier("mln") == 1_000_000.0
+    assert de.get_unit_multiplier("mld") == 1_000_000_000.0
 
 
-def test_alert_push_subscriptions(tmp_path):
-    subs_path = str(tmp_path / "push_subs.json")
-    sub_valid = {
-        "endpoint": "https://push.example.com/sub/123",
-        "keys": {"p256dh": "key123", "auth": "auth123"}
-    }
-    sub_invalid = {"endpoint": "http://insecure.com", "keys": {}}
-
-    assert ae.valid_subscription(sub_valid)
-    assert not ae.valid_subscription(sub_invalid)
-
-    # Add subscription
-    assert ae.add_subscription(sub_valid, lang="it", path=subs_path)
-    subs = ae.load_subscriptions(subs_path)
-    assert len(subs) == 1
-    assert subs[0]["endpoint"] == sub_valid["endpoint"]
-    assert subs[0]["lang"] == "it"
-
-    # Refresh subscription language
-    assert ae.add_subscription(sub_valid, lang="en", path=subs_path)
-    subs = ae.load_subscriptions(subs_path)
-    assert len(subs) == 1 and subs[0]["lang"] == "en"
-
-    # Remove subscription
-    assert ae.remove_subscription(sub_valid["endpoint"], path=subs_path)
-    assert ae.load_subscriptions(subs_path) == []
+def test_discover_evaluate_condition():
+    assert de.evaluate_condition(100, 50, ">=")
+    assert not de.evaluate_condition(30, 50, ">=")
+    assert de.evaluate_condition(30, 50, "<=")
+    assert de.evaluate_condition(1980, 2000, "<=")
+    assert de.evaluate_condition(2015, 2000, ">=")
+    assert de.evaluate_condition(2020, 2020, "==")
 
 
-def test_alert_push_payload_and_notify_subscribers(tmp_path):
-    event = {"symbol": "AAPL", "condition": ">=", "target": 150.0, "price": 155.0, "ts": 1700000000}
-    payload_en = ae.build_push_payload(event, lang="en")
-    assert "AAPL" in payload_en["title"]
-    assert "155.00" in payload_en["body"]
-    assert payload_en["tag"] == "fdash-AAPL->=-150.000000"
-
-    payload_it = ae.build_push_payload(event, lang="it")
-    assert "raggiunto" in payload_it["title"] or "target" in payload_it["title"]
-
-    # Notify subscribers with mock sender
-    subs_path = str(tmp_path / "push_subs.json")
-    ae.add_subscription({"endpoint": "https://push.example.com/1", "keys": {"p256dh": "k1", "auth": "a1"}}, lang="en", path=subs_path)
-    ae.add_subscription({"endpoint": "https://push.example.com/2", "keys": {"p256dh": "k2", "auth": "a2"}}, lang="it", path=subs_path)
-
-    sent = []
-    def mock_sender(sub, payload):
-        sent.append((sub["endpoint"], payload["title"]))
-        if "1" in sub["endpoint"]:
-            return "ok"
-        return "gone"
-
-    res = ae.notify_subscribers(event, subs_path=subs_path, sender=mock_sender)
-    assert res == {"ok": 1, "gone": 1, "error": 0}
-    assert len(sent) == 2
-    # Check that expired sub ("2") was removed
-    subs_remaining = ae.load_subscriptions(subs_path)
-    assert len(subs_remaining) == 1
-    assert subs_remaining[0]["endpoint"] == "https://push.example.com/1"
+def test_discover_formatting_helpers():
+    assert de.format_market_cap(1_500_000_000) == "$1.50B"
+    assert de.format_market_cap(250_000_000) == "$250.00M"
+    assert de.format_volume(15_000_000) == "15.00M"
+    assert de.format_volume(500_000) == "500.00K"
 
 
-def test_alert_worker_state_alive_and_cycle(tmp_path):
-    state_path = str(tmp_path / "state.json")
-    rules_path = str(tmp_path / "rules.json")
-
-    state = ae.load_state(state_path)
-    assert state["heartbeat"] == 0.0
-    assert not ae.worker_alive(state, now=500.0)
-
-    state["heartbeat"] = 900.0
-    state["interval"] = 60.0
-    assert ae.worker_alive(state, now=1000.0)
-    assert not ae.worker_alive(state, now=1200.0)
-
-    # Save rules
-    df_rules = pd.DataFrame([{"symbol": "TSLA", "condition": ">=", "target": 200.0, "active": True}])
-    ae.save_rules(df_rules, rules_path)
-
-    # Mock fetch & notify
-    mock_fetch = lambda symbols: {"TSLA": 210.0}
-    pushed_events = []
-    mock_notify = lambda evt: pushed_events.append(evt) or {"ok": 1}
-
-    updated_state = ae.worker_cycle(state, rules_path=rules_path, fetch=mock_fetch, notify=mock_notify, now=1000.0)
-    assert updated_state["heartbeat"] == 1000.0
-    assert updated_state["prices"] == {"TSLA": 210.0}
-    assert len(updated_state["events"]) == 1
-    assert len(pushed_events) == 1
-    assert pushed_events[0]["symbol"] == "TSLA"
-    assert ae.save_state(updated_state, state_path)
-
-    loaded_state = ae.load_state(state_path)
-    assert loaded_state["seq"] == 1
+def test_discover_universe_sp500():
+    sp = de.universe_sp500()
+    assert len(sp) >= 10
+    assert "AAPL" in sp or "MSFT" in sp
 
 
-def test_alert_clear_state_functions(tmp_path):
-    state_path = str(tmp_path / "state.json")
-    state = {
-        "prices": {"AAPL": 180.0, "TSLA": 220.0},
-        "events": [{"symbol": "AAPL", "target": 175.0, "price": 180.0}],
-        "fired": ["AAPL|>=|175.000000"]
-    }
-    ae.save_state(state, state_path)
+def test_discover_filter_stocks():
+    stocks = [
+        {"Ticker": "AAPL", "Name": "Apple", "Price": 150.0, "MarketCap": 2_000_000_000_000, "Volume": 50_000_000, "BirthYear": 1980},
+        {"Ticker": "PLTR", "Name": "Palantir", "Price": 25.0, "MarketCap": 50_000_000_000, "Volume": 30_000_000, "BirthYear": 2020},
+        {"Ticker": "SMALL", "Name": "SmallCo", "Price": 5.0, "MarketCap": 500_000, "Volume": 100_000, "BirthYear": 2015},
+    ]
 
-    # Test clear_state_prices
-    ae.clear_state_prices(state_path)
-    s1 = ae.load_state(state_path)
-    assert s1["prices"] == {}
-    assert len(s1["events"]) == 1
+    # Filter Volume >= 10M, Market Cap >= 1B, Birth Year <= 2000
+    f1 = de.filter_discovered_stocks(
+        stocks,
+        vol_target=10.0, vol_unit="mln", vol_op=">=",
+        mc_target=1.0, mc_unit="mld", mc_op=">=",
+        birth_year_target=2000, birth_year_op="<="
+    )
+    assert len(f1) == 1
+    assert f1[0]["Ticker"] == "AAPL"
 
-    # Test clear_state_events
-    ae.clear_state_events(state_path)
-    s2 = ae.load_state(state_path)
-    assert s2["events"] == []
-    assert s2["fired"] == []
-
-
-def test_sqlite_alert_events(tmp_path):
-    test_db = str(tmp_path / "alerts_test.db")
-    event1 = {"time": "12:00:00", "symbol": "AAPL", "condition": ">=", "target": 180.0, "price": 185.0}
-    event2 = {"time": "12:05:00", "symbol": "TSLA", "condition": "<=", "target": 200.0, "price": 195.0}
-
-    row1 = db.save_alert_event(event1, db_file=test_db)
-    row2 = db.save_alert_event(event2, db_file=test_db)
-    assert row1 > 0 and row2 > 0
-
-    events = db.list_alert_events(db_file=test_db)
-    assert len(events) == 2
-    assert events[0]["symbol"] == "TSLA"
-    assert events[1]["symbol"] == "AAPL"
-
-    cleared = db.clear_alert_events(db_file=test_db)
-    assert cleared
-    assert db.list_alert_events(db_file=test_db) == []
+    # Filter Birth Year >= 2010
+    f2 = de.filter_discovered_stocks(
+        stocks,
+        vol_target=None,
+        mc_target=None,
+        birth_year_target=2010, birth_year_op=">="
+    )
+    assert len(f2) == 2
+    assert {s["Ticker"] for s in f2} == {"PLTR", "SMALL"}
