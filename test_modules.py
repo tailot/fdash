@@ -493,3 +493,25 @@ def test_alert_worker_state_alive_and_cycle(tmp_path):
 
     loaded_state = ae.load_state(state_path)
     assert loaded_state["seq"] == 1
+
+
+def test_alert_clear_state_functions(tmp_path):
+    state_path = str(tmp_path / "state.json")
+    state = {
+        "prices": {"AAPL": 180.0, "TSLA": 220.0},
+        "events": [{"symbol": "AAPL", "target": 175.0, "price": 180.0}],
+        "fired": ["AAPL|>=|175.000000"]
+    }
+    ae.save_state(state, state_path)
+
+    # Test clear_state_prices
+    ae.clear_state_prices(state_path)
+    s1 = ae.load_state(state_path)
+    assert s1["prices"] == {}
+    assert len(s1["events"]) == 1
+
+    # Test clear_state_events
+    ae.clear_state_events(state_path)
+    s2 = ae.load_state(state_path)
+    assert s2["events"] == []
+    assert s2["fired"] == []

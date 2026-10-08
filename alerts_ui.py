@@ -20,9 +20,9 @@ import pandas as pd
 import streamlit as st
 
 from alerts_engine import (CONDITIONS, MAX_LOG_ENTRIES, POLL_INTERVAL_SECONDS, add_subscription,
-                           build_push_payload, empty_rules, ensure_vapid_keys, evaluate_rules, fetch_last_prices,
-                           is_triggered, load_rules, load_state, load_subscriptions, make_beep_wav,
-                           normalize_rules, notify_subscribers, remove_subscription, save_rules, worker_alive)
+                           build_push_payload, clear_state_events, clear_state_prices, empty_rules, ensure_vapid_keys,
+                           evaluate_rules, fetch_last_prices, is_triggered, load_rules, load_state, load_subscriptions,
+                           make_beep_wav, normalize_rules, notify_subscribers, remove_subscription, save_rules, worker_alive)
 from i18n import t
 
 UI_REFRESH_SECONDS = 5   # redraw of the live table only (no network calls)
@@ -374,13 +374,31 @@ def _set_monitoring(value: bool):
         st.session_state["alerts_fired"] = set()
 
 
+def _clear_prices():
+    st.session_state["alerts_prices"] = {}
+    clear_state_prices()
+
+
+def _clear_log():
+    st.session_state["alerts_log"] = []
+    st.session_state["alerts_fired"] = set()
+    clear_state_events()
+
+
 def _live_body(lang: str):
     ss = st.session_state
     state = load_state()
     if worker_alive(state):
         _adopt_worker_state(state, lang)
     rules = normalize_rules(ss["alerts_rules"])
-    st.subheader(t("alerts_live_header", lang))
+
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader(t("alerts_live_header", lang))
+    with col2:
+        if ss["alerts_prices"]:
+            st.button(t("alerts_clear_prices", lang), key="btn_clear_prices", on_click=_clear_prices)
+
     if not rules:
         st.info(t("alerts_no_rules", lang))
     else:
@@ -405,7 +423,13 @@ def _live_body(lang: str):
             })
         st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
 
-    st.subheader(t("alerts_log_header", lang))
+    col3, col4 = st.columns([3, 1])
+    with col3:
+        st.subheader(t("alerts_log_header", lang))
+    with col4:
+        if ss["alerts_log"]:
+            st.button(t("alerts_clear_log", lang), key="btn_clear_log", on_click=_clear_log)
+
     if ss["alerts_log"]:
         log = pd.DataFrame(ss["alerts_log"]).rename(columns={
             "time": t("alerts_col_time", lang), "symbol": t("alerts_col_symbol", lang),

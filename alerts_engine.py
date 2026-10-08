@@ -411,3 +411,18 @@ def worker_cycle(state: dict, rules_path: str = None, fetch=None, notify=None, n
 
 def save_state(state: dict, path: str = None) -> bool:
     return _write_json_atomic(path or STATE_PATH, state)
+
+
+def clear_state_prices(path: str = None) -> bool:
+    """Clears cached live prices in the state file."""
+    state = load_state(path)
+    state["prices"] = {}
+    return save_state(state, path)
+
+
+def clear_state_events(path: str = None) -> bool:
+    """Clears triggered alarms (events and fired set) in the state file."""
+    state = load_state(path)
+    state["events"] = []
+    state["fired"] = []
+    return save_state(state, path)
