@@ -87,6 +87,44 @@ You can run the application in an isolated and automated environment using **Doc
 
 ---
 
+## 📱 Running on Termux (Android)
+
+You can run the dashboard natively on Android devices using **Termux**.
+
+### 1. Prerequisites on Android
+1. Install **Termux** (recommended from [F-Droid](https://f-droid.org/packages/com.termux/)).
+2. Open Termux and clone this repository:
+   ```bash
+   pkg update && pkg install -y git
+   git clone <repository_url>
+   cd fdash
+   ```
+
+### 2. Launching via `termuxrun.sh`
+Run the included launcher script:
+
+```bash
+chmod +x termuxrun.sh
+./termuxrun.sh
+```
+
+The script automatically detects the Termux environment, installs required system packages, sets up an isolated Python virtual environment, installs dependencies, and launches the Streamlit dashboard.
+
+#### Options:
+- **Enable TimesFM support:**
+  ```bash
+  ./termuxrun.sh --timesfm
+  ```
+- **Custom Port:**
+  ```bash
+  PORT=8502 ./termuxrun.sh
+  ```
+
+Once launched, open your browser on Android and navigate to:
+`http://localhost:8501`
+
+---
+
 ## ⚙️ Application Usage & Sidebar Menu Customizations
 
 The application sidebar allows you to customize every aspect of the quantitative forecast, volume microstructure analysis, backtesting, price alerts, and UI language.
@@ -221,6 +259,7 @@ pytest test_modules.py
 ├── requirements-timesfm.txt # Optional dependencies for real TimesFM-3 model
 ├── Dockerfile               # Docker container definition
 ├── docker-compose.yml       # Docker Compose service definition
+├── termuxrun.sh             # Automated setup and launcher script for Termux on Android
 └── README.md                # Project documentation and usage guide
 ```
 
