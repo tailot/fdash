@@ -26,12 +26,10 @@ echo "=================================================="
 if [ -n "$TERMUX_VERSION" ] || [ -d "/data/data/com.termux" ]; then
     echo "[+] Termux environment detected."
 
-    # Install required system packages if python or git are missing
-    if ! command -v python3 &> /dev/null || ! command -v git &> /dev/null; then
-        echo "[*] Installing system dependencies via pkg..."
-        pkg update -y
-        pkg install -y python git clang make libcrypt libffi openssl
-    fi
+    # Install required system packages (including precompiled binaries for heavy python packages)
+    echo "[*] Installing system dependencies via pkg..."
+    pkg update -y
+    pkg install -y python python-pip python-numpy python-pandas python-pillow python-cryptography git clang make libcrypt libffi openssl
 else
     echo "[!] Termux environment not explicitly detected; proceeding with system environment."
 fi
@@ -42,12 +40,12 @@ if ! command -v python3 &> /dev/null; then
     exit 1
 fi
 
-# Setup Python virtual environment
+# Setup Python virtual environment with system site-packages enabled so precompiled pkg modules are reused
 VENV_DIR="$SCRIPT_DIR/.venv_termux"
 
 if [ ! -d "$VENV_DIR" ]; then
     echo "[*] Creating Python virtual environment in $VENV_DIR..."
-    python3 -m venv "$VENV_DIR"
+    python3 -m venv --system-site-packages "$VENV_DIR"
 fi
 
 echo "[*] Activating virtual environment..."
