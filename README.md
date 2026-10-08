@@ -108,7 +108,14 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 - Choose **🔊 Sound alarm** and/or **💬 Notification** (in-app toast + browser notification: click *Enable browser notifications* once).
 - **▶ Start monitoring**: the app makes **one batched call per interval** to the finance service (Yahoo Finance, 1-minute bars) for all the active symbols. The interval is `POLL_INTERVAL_SECONDS` in `alerts_engine.py` (default 60, or env var `FDASH_ALERT_POLL_SECONDS`).
 - An alarm fires once when the condition becomes true and re-arms when it becomes false again (no repeated alarm every minute). Fired alarms are listed in the log.
-- Keep the browser tab open: monitoring runs while the session is alive. Click *Start monitoring* at least once so the browser allows the alarm sound.
+- Without the worker service (fallback) keep the browser tab open: monitoring runs while the session is alive. Click *Start monitoring* at least once so the browser allows the alarm sound. When the worker is running the dashboard just mirrors its state (no duplicate calls to the finance service) and only plays the in-app sound/toast.
+
+**Background notifications (worker service)**
+- `alerts_worker.py` is a standalone process (no Streamlit, no open tab needed): every interval it makes **one batched call** to the finance service, evaluates the rules and sends a **Web Push** notification to every subscribed browser/phone.
+- In the Alerts section click *🔔 Enable on this device* once per device. The service worker `static/sw.js` shows the system notification even with the tab closed (served via `.streamlit/config.toml`: `enableStaticServing = true`).
+- Run it with `docker compose up -d` (the `alerts-worker` service shares `/data` with the dashboard) or manually: `python alerts_worker.py` (`--once` for a single cycle, `--test-push` to send a test notification).
+- Web Push needs HTTPS (or `localhost`). On iOS the app must be added to the Home Screen first.
+- Env vars: `FDASH_DATA_DIR`, `FDASH_ALERT_POLL_SECONDS`, `FDASH_VAPID_CONTACT`.
 
 ### 📊 Universe Configuration
 - **Stocks Universe Selection:** Choose between two modes:
@@ -198,7 +205,10 @@ pytest test_modules.py
 ├── .github/                 # GitHub Actions CI workflows (automated unit testing)
 ├── app.py                   # Main Streamlit dashboard interface & navigation tabs
 ├── alerts_engine.py         # Price alerts logic: rules, batched price fetch, polling interval, alarm sound
-├── alerts_ui.py             # Streamlit UI for the Alerts section + background monitor
+├── alerts_ui.py             # Streamlit UI for the Alerts section + background monitor + push subscription panel
+├── alerts_worker.py         # Standalone worker service: polls prices, sends Web Push notifications in background
+├── static/                  # sw.js (notifications service worker) + notification icons, served by Streamlit
+├── .streamlit/config.toml   # enableStaticServing = true (serves ./static)
 ├── quant_engine.py          # TimesFM-3 quantitative pipeline (universe, prices, log returns, quantiles)
 ├── volume_engine.py         # Volume pipeline (buy/sell, Volume Profile, value area, POC/VWAP)
 ├── heuristic_enrichment.py  # Local heuristic qualitative enrichment module

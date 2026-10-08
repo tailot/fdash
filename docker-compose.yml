@@ -6,9 +6,34 @@ services:
       - "8501:8501"
     volumes:
       - hf_cache:/app/.cache/huggingface
+      - fdash_data:/data
     environment:
       - PYTHONUNBUFFERED=1
+      - FDASH_DATA_DIR=/data
+    restart: unless-stopped
+
+  # Alerts worker: polls the finance service once per interval and sends Web Push notifications,
+  # even when no browser tab is open. Shares rules / subscriptions / VAPID keys with the dashboard via /data.
+  alerts-worker:
+    build: .
+    container_name: fdash_alerts_worker
+    entrypoint: ["python", "alerts_worker.py"]
+    volumes:
+      - fdash_data:/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - FDASH_DATA_DIR=/data
+      - FDASH_ALERT_POLL_SECONDS=60
+      # - FDASH_VAPID_CONTACT=mailto:you@example.com
+    healthcheck:
+      test: ["CMD", "python", "-c", "import alerts_engine as a,sys; sys.exit(0 if a.worker_alive(a.load_state()) else 1)"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+    depends_on:
+      - financial-dashboard
     restart: unless-stopped
 
 volumes:
   hf_cache:
+  fdash_data:
