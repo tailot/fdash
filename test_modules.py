@@ -10,6 +10,7 @@ from volume_engine import stima_buy_sell, verdetto_delta
 from heuristic_enrichment import genera_analisi_euristica
 from i18n import t, LANGUAGES
 import db_engine as db
+import discover_engine as de
 
 
 # ------------------------------------------------------------------ synthetic data
@@ -163,6 +164,8 @@ def test_i18n_translation_keys():
         assert t("col_last_price", code) != ""
         assert t("welcome", code) != ""
         assert t("welcome", code).format("User") != ""
+        assert t("nav_discover", code) != ""
+        assert t("discover_title", code) != ""
 
 
 def test_heuristic_enrichment_multilingual():
@@ -381,3 +384,55 @@ def test_auth_config_check(monkeypatch):
     }
     monkeypatch.setattr(st, "secrets", mock_secrets)
     assert _has_auth_config()
+
+
+# ------------------------------------------------------------------ Discover Engine Tests
+def test_discover_unit_multipliers():
+    assert de.get_unit_multiplier("1") == 1.0
+    assert de.get_unit_multiplier("k") == 1_000.0
+    assert de.get_unit_multiplier("mln") == 1_000_000.0
+    assert de.get_unit_multiplier("mld") == 1_000_000_000.0
+
+
+def test_discover_evaluate_condition():
+    assert de.evaluate_condition(100, 50, ">=")
+    assert not de.evaluate_condition(30, 50, ">=")
+    assert de.evaluate_condition(30, 50, "<=")
+    assert de.evaluate_condition(1980, 2000, "<=")
+    assert de.evaluate_condition(2015, 2000, ">=")
+    assert de.evaluate_condition(2020, 2020, "==")
+
+
+def test_discover_formatting_helpers():
+    assert de.format_market_cap(1_500_000_000) == "$1.50B"
+    assert de.format_market_cap(250_000_000) == "$250.00M"
+    assert de.format_volume(15_000_000) == "15.00M"
+    assert de.format_volume(500_000) == "500.00K"
+
+
+def test_discover_filter_stocks():
+    stocks = [
+        {"Ticker": "AAPL", "Name": "Apple", "Price": 150.0, "MarketCap": 2_000_000_000_000, "Volume": 50_000_000, "BirthYear": 1980},
+        {"Ticker": "PLTR", "Name": "Palantir", "Price": 25.0, "MarketCap": 50_000_000_000, "Volume": 30_000_000, "BirthYear": 2020},
+        {"Ticker": "SMALL", "Name": "SmallCo", "Price": 5.0, "MarketCap": 500_000, "Volume": 100_000, "BirthYear": 2015},
+    ]
+
+    # Filter Volume >= 10M, Market Cap >= 1B, Birth Year <= 2000
+    f1 = de.filter_discovered_stocks(
+        stocks,
+        vol_target=10.0, vol_unit="mln", vol_op=">=",
+        mc_target=1.0, mc_unit="mld", mc_op=">=",
+        birth_year_target=2000, birth_year_op="<="
+    )
+    assert len(f1) == 1
+    assert f1[0]["Ticker"] == "AAPL"
+
+    # Filter Birth Year >= 2010
+    f2 = de.filter_discovered_stocks(
+        stocks,
+        vol_target=None,
+        mc_target=None,
+        birth_year_target=2010, birth_year_op=">="
+    )
+    assert len(f2) == 2
+    assert {s["Ticker"] for s in f2} == {"PLTR", "SMALL"}
