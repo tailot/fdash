@@ -8,3 +8,5 @@ pytest>=7.0.0
 transformers>=4.40.0
 torch>=2.2.0
 torchvision
+pywebpush>=2.0.0
+cryptography>=42.0.0

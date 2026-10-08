@@ -1,0 +1,3 @@
+[server]
+# Serves ./static at <base>/app/static/ : needed for the notifications service worker (static/sw.js) and its icons.
+enableStaticServing = true
