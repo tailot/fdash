@@ -11,6 +11,7 @@ from discover_engine import (
     filter_discovered_stocks,
     format_market_cap,
     format_volume,
+    universe_sp500,
 )
 
 
@@ -93,29 +94,43 @@ def render_discover_section(lang_code: str = "en"):
     with uni_col1:
         universo_type = st.radio(
             t("universe_radio", lang_code),
-            options=["top_nasdaq", "manual_list"],
+            options=["sp500", "top_nasdaq", "all_nasdaq", "manual_list"],
             format_func=lambda x: t(f"discover_universe_{x}", lang_code),
             key="discover_universe_type",
         )
 
     with uni_col2:
         if universo_type == "top_nasdaq":
-            n_top = st.slider(t("n_stocks_slider", lang_code), 20, 200, 100, step=10, key="discover_n_top")
+            n_top = st.slider(t("n_stocks_slider", lang_code), 50, 3000, 500, step=50, key="discover_n_top")
             tickers_input = ""
-        else:
+        elif universo_type == "manual_list":
             n_top = 100
             tickers_input = st.text_input(
                 t("tickers_input", lang_code),
                 "AAPL, MSFT, NVDA, TSLA, PLTR, AMZN, GOOGL, META, MSTR, AMD, NFLX, DIS, INTC, CSCO",
                 key="discover_tickers_input",
             )
+        else:
+            n_top = 100
+            tickers_input = ""
 
     run_discover = st.button(t("discover_button", lang_code), type="primary")
 
     if run_discover:
+        cand = []
         if universo_type == "manual_list":
             cand = [t_item.strip().upper() for t_item in tickers_input.split(",") if t_item.strip()]
-        else:
+        elif universo_type == "sp500":
+            with st.spinner(t("discover_fetching_universe", lang_code)):
+                cand = universe_sp500()
+        elif universo_type == "all_nasdaq":
+            with st.spinner(t("discover_fetching_universe", lang_code)):
+                try:
+                    _, _, cand = ricava_universo(n_tickers=4500, buffer=0, tickers_manuali=None)
+                except Exception as e:
+                    st.error(f"Error retrieving universe: {e}")
+                    cand = []
+        else:  # top_nasdaq
             with st.spinner(t("discover_fetching_universe", lang_code)):
                 try:
                     _, _, cand = ricava_universo(n_tickers=n_top, buffer=0, tickers_manuali=None)
@@ -128,7 +143,7 @@ def render_discover_section(lang_code: str = "en"):
             return
 
         with st.spinner(t("discover_fetching_info", lang_code).format(len(cand))):
-            stocks_data = fetch_stocks_batch(cand, max_workers=15)
+            stocks_data = fetch_stocks_batch(cand, max_workers=20)
 
         filtered = filter_discovered_stocks(
             stocks=stocks_data,

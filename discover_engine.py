@@ -1,12 +1,20 @@
 """
 Discover Engine: Fetches and filters company data based on Volume, Market Cap, and Birth Year.
+Supports S&P 500 (~500 stocks) and large NASDAQ universes (~4,000 stocks).
 """
 
+import io
+import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 import pandas as pd
 import numpy as np
 import yfinance as yf
+
+UA = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+}
 
 # Unit Multipliers Mapping
 UNIT_MULTIPLIERS = {
@@ -23,6 +31,29 @@ UNIT_MULTIPLIERS = {
 }
 
 
+def universe_sp500() -> list[str]:
+    """Retrieves list of S&P 500 stock tickers from Wikipedia."""
+    try:
+        url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+        r = requests.get(url, headers=UA, timeout=15)
+        r.raise_for_status()
+        tables = pd.read_html(io.StringIO(r.text))
+        syms = (
+            tables[0]["Symbol"]
+            .astype(str)
+            .str.replace(".", "-", regex=False)
+            .str.strip()
+            .str.upper()
+            .tolist()
+        )
+        return [s for s in syms if s and s.isalnum() or "-" in s]
+    except Exception:
+        return [
+            "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL", "META", "BRK-B", "TSLA",
+            "UNH", "JNJ", "JPM", "V", "PG", "XOM", "HD", "MA", "COST", "ABBV"
+        ]
+
+
 def get_unit_multiplier(unit_str: str) -> float:
     """Returns the numeric multiplier for a given unit string."""
     if not unit_str:
@@ -36,6 +67,16 @@ def fetch_single_stock_info(symbol: str) -> dict:
     clean_sym = symbol.strip().upper()
     try:
         t = yf.Ticker(clean_sym)
+        fi = getattr(t, "fast_info", None)
+
+        # Fast Info extraction
+        fast_price = getattr(fi, "last_price", None) if fi else None
+        fast_mc = getattr(fi, "market_cap", None) if fi else None
+        fast_vol = (
+            getattr(fi, "last_volume", None) or getattr(fi, "three_month_average_volume", None)
+            if fi else None
+        )
+
         info = t.info or {}
 
         # Name & Sector
@@ -44,7 +85,8 @@ def fetch_single_stock_info(symbol: str) -> dict:
 
         # Price
         price = (
-            info.get("currentPrice")
+            fast_price
+            or info.get("currentPrice")
             or info.get("regularMarketPreviousClose")
             or info.get("previousClose")
             or info.get("navPrice")
@@ -56,14 +98,14 @@ def fetch_single_stock_info(symbol: str) -> dict:
                 price = None
 
         # Market Cap & Volume
-        mc = info.get("marketCap")
+        mc = fast_mc or info.get("marketCap")
         if mc is not None:
             try:
                 mc = float(mc)
             except (ValueError, TypeError):
                 mc = None
 
-        vol = info.get("volume") or info.get("regularMarketVolume") or info.get("averageVolume")
+        vol = fast_vol or info.get("volume") or info.get("regularMarketVolume") or info.get("averageVolume")
         if vol is not None:
             try:
                 vol = float(vol)
@@ -110,7 +152,7 @@ def fetch_single_stock_info(symbol: str) -> dict:
         }
 
 
-def fetch_stocks_batch(tickers: list[str], max_workers: int = 15) -> list[dict]:
+def fetch_stocks_batch(tickers: list[str], max_workers: int = 20) -> list[dict]:
     """Fetches stock info concurrently for a list of tickers."""
     unique_tickers = list(dict.fromkeys([t.strip().upper() for t in tickers if t and t.strip()]))
     if not unique_tickers:

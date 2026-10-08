@@ -410,6 +410,12 @@ def test_discover_formatting_helpers():
     assert de.format_volume(500_000) == "500.00K"
 
 
+def test_discover_universe_sp500():
+    sp = de.universe_sp500()
+    assert len(sp) >= 10
+    assert "AAPL" in sp or "MSFT" in sp
+
+
 def test_discover_filter_stocks():
     stocks = [
         {"Ticker": "AAPL", "Name": "Apple", "Price": 150.0, "MarketCap": 2_000_000_000_000, "Volume": 50_000_000, "BirthYear": 1980},
