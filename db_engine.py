@@ -34,7 +34,7 @@ def get_connection(db_file: str = DB_FILE) -> sqlite3.Connection:
 
 
 def init_db(db_file: str = DB_FILE):
-    """Initializes SQLite database and creates analysis_runs table if it doesn't exist."""
+    """Initializes SQLite database and creates tables if they don't exist."""
     with get_connection(db_file) as conn:
         cursor = conn.cursor()
         cursor.execute("""
@@ -50,6 +50,16 @@ def init_db(db_file: str = DB_FILE):
                 quant_json TEXT NOT NULL,
                 vol_json TEXT NOT NULL,
                 info_json TEXT NOT NULL
+            )
+        """)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS triggered_alerts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT NOT NULL,
+                symbol TEXT NOT NULL,
+                condition TEXT NOT NULL,
+                target REAL NOT NULL,
+                price REAL NOT NULL
             )
         """)
         conn.commit()
@@ -181,3 +191,47 @@ def delete_run(run_id: int, db_file: str = DB_FILE) -> bool:
         cursor.execute("DELETE FROM analysis_runs WHERE id = ?", (run_id,))
         conn.commit()
         return cursor.rowcount > 0
+
+
+def save_alert_event(event: dict, db_file: str = DB_FILE) -> int:
+    """Saves a triggered alert event to the database."""
+    init_db(db_file)
+    ts = str(event.get("time") or event.get("ts") or datetime.datetime.now().strftime("%H:%M:%S"))
+    with get_connection(db_file) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            INSERT INTO triggered_alerts (timestamp, symbol, condition, target, price)
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            ts,
+            str(event.get("symbol") or ""),
+            str(event.get("condition") or ""),
+            float(event.get("target") or 0.0),
+            float(event.get("price") or 0.0)
+        ))
+        conn.commit()
+        return cursor.lastrowid
+
+
+def list_alert_events(db_file: str = DB_FILE) -> list:
+    """Lists saved triggered alert events from the database."""
+    init_db(db_file)
+    with get_connection(db_file) as conn:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id, timestamp as time, symbol, condition, target, price
+            FROM triggered_alerts
+            ORDER BY id DESC
+        """)
+        rows = cursor.fetchall()
+        return [dict(r) for r in rows]
+
+
+def clear_alert_events(db_file: str = DB_FILE) -> bool:
+    """Deletes all triggered alert records from the database."""
+    init_db(db_file)
+    with get_connection(db_file) as conn:
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM triggered_alerts")
+        conn.commit()
+        return True

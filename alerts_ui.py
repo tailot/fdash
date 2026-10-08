@@ -382,6 +382,7 @@ def _clear_prices():
 def _clear_log():
     st.session_state["alerts_log"] = []
     st.session_state["alerts_fired"] = set()
+    st.session_state["alerts_seen_seq"] = None
     clear_state_events()
 
 

@@ -30,6 +30,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import yfinance as yf
+import db_engine as db
 
 # ----------------------------------------------------------------------------- configuration
 POLL_INTERVAL_SECONDS = int(os.environ.get("FDASH_ALERT_POLL_SECONDS", "60"))
@@ -397,12 +398,26 @@ def worker_cycle(state: dict, rules_path: str = None, fetch=None, notify=None, n
         state["last_poll"] = now
     state["prices"].update(prices)
 
+    # Sync in-memory state with on-disk state if the user cleared state externally (UI button)
+    disk_state = _read_json(STATE_PATH, {})
+    if isinstance(disk_state, dict):
+        if disk_state.get("events") == [] and state.get("events"):
+            state["events"] = []
+            state["fired"] = []
+        if disk_state.get("prices") == {} and state.get("prices"):
+            state["prices"] = {}
+
     events, fired = evaluate_rules(rules, prices, set(state["fired"]))
     state["fired"] = sorted(fired)
     for e in events:
         state["seq"] += 1
         e["id"], e["ts"] = state["seq"], int(now)
         e["push"] = notify(e)
+        try:
+            db.save_alert_event(e)
+        except Exception as ex:
+            log.warning("failed to persist alert event to database: %s", ex)
+
     state["events"] = (events[::-1] + state["events"])[:MAX_LOG_ENTRIES]
     state["heartbeat"] = now
     state["interval"] = POLL_INTERVAL_SECONDS
@@ -421,7 +436,11 @@ def clear_state_prices(path: str = None) -> bool:
 
 
 def clear_state_events(path: str = None) -> bool:
-    """Clears triggered alarms (events and fired set) in the state file."""
+    """Clears triggered alarms (events and fired set) in the state file and SQLite database."""
+    try:
+        db.clear_alert_events()
+    except Exception as e:
+        log.warning("failed to clear database alert events: %s", e)
     state = load_state(path)
     state["events"] = []
     state["fired"] = []

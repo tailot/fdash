@@ -515,3 +515,22 @@ def test_alert_clear_state_functions(tmp_path):
     s2 = ae.load_state(state_path)
     assert s2["events"] == []
     assert s2["fired"] == []
+
+
+def test_sqlite_alert_events(tmp_path):
+    test_db = str(tmp_path / "alerts_test.db")
+    event1 = {"time": "12:00:00", "symbol": "AAPL", "condition": ">=", "target": 180.0, "price": 185.0}
+    event2 = {"time": "12:05:00", "symbol": "TSLA", "condition": "<=", "target": 200.0, "price": 195.0}
+
+    row1 = db.save_alert_event(event1, db_file=test_db)
+    row2 = db.save_alert_event(event2, db_file=test_db)
+    assert row1 > 0 and row2 > 0
+
+    events = db.list_alert_events(db_file=test_db)
+    assert len(events) == 2
+    assert events[0]["symbol"] == "TSLA"
+    assert events[1]["symbol"] == "AAPL"
+
+    cleared = db.clear_alert_events(db_file=test_db)
+    assert cleared
+    assert db.list_alert_events(db_file=test_db) == []
