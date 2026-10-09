@@ -357,6 +357,26 @@ def test_alert_fires_once_and_rearms():
     assert ae.rule_key(rules[0]) in fired
 
 
+def test_worker_cycle_retains_prices(monkeypatch, tmp_path):
+    state_file = str(tmp_path / "alerts_state.json")
+    rules_file = str(tmp_path / "alerts_config.json")
+    monkeypatch.setattr(ae, "STATE_PATH", state_file)
+
+    rules_df = pd.DataFrame([{"symbol": "AAPL", "condition": ">=", "target": 200.0, "active": True}])
+    ae.save_rules(rules_df, rules_file)
+
+    # First cycle starting with initial state on disk
+    init_state = ae.load_state(state_file)
+    ae.save_state(init_state, state_file)
+
+    def fake_fetch(symbols):
+        return {"AAPL": 210.50}
+
+    state = ae.load_state(state_file)
+    updated_state = ae.worker_cycle(state, rules_path=rules_file, fetch=fake_fetch, notify=lambda e: {})
+    assert updated_state["prices"] == {"AAPL": 210.50}
+
+
 def test_fetch_last_prices_single_batched_call(monkeypatch):
     calls = []
     idx = pd.date_range("2026-10-06 14:30", periods=3, freq="min", tz="UTC")
