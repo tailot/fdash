@@ -399,6 +399,15 @@ def worker_cycle(state: dict, rules_path: str = None, fetch=None, notify=None, n
     notify = notify or notify_subscribers
     now = now or time.time()
 
+    # Sync in-memory state with on-disk state if the user cleared state externally (UI button)
+    disk_state = _read_json(STATE_PATH, {})
+    if isinstance(disk_state, dict):
+        if disk_state.get("events") == [] and state.get("events"):
+            state["events"] = []
+            state["fired"] = []
+        if disk_state.get("prices") == {} and state.get("prices"):
+            state["prices"] = {}
+
     rules = [r for r in normalize_rules(load_rules(rules_path)) if r["active"]]
     prices = {}
     state["last_error"] = None
@@ -411,15 +420,6 @@ def worker_cycle(state: dict, rules_path: str = None, fetch=None, notify=None, n
             state["last_error"] = str(e)[:200]
         state["last_poll"] = now
     state["prices"].update(prices)
-
-    # Sync in-memory state with on-disk state if the user cleared state externally (UI button)
-    disk_state = _read_json(STATE_PATH, {})
-    if isinstance(disk_state, dict):
-        if disk_state.get("events") == [] and state.get("events"):
-            state["events"] = []
-            state["fired"] = []
-        if disk_state.get("prices") == {} and state.get("prices"):
-            state["prices"] = {}
 
     events, fired = evaluate_rules(rules, prices, set(state["fired"]))
     state["fired"] = sorted(fired)
