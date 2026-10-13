@@ -17,10 +17,10 @@ Termux Standalone Terminal Price Alert Application.
 
 This module provides a pure standard-library price alert monitoring system
 designed to run exclusively inside Termux on Android without requiring heavy
-third-party dependencies (e.g. pandas, numpy, yfinance). Audio notifications
-leverage sound playback (generated WAV tone, media players, Termux notification
-with sound/vibration, terminal bells) and support background screen lock execution
-via Termux WakeLock.
+third-party dependencies (e.g. pandas, numpy, yfinance). Notifications and audio
+leverage sound playback (generated WAV tone, media players, terminal bells) and
+Android system notifications (`termux-notification`), supporting background screen
+lock execution via Termux WakeLock.
 """
 
 import io
@@ -87,6 +87,31 @@ def release_wake_lock() -> bool:
     if cmd:
         try:
             subprocess.run([cmd], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return True
+        except Exception:
+            pass
+    return False
+
+
+# ----------------------------------------------------------------------------- Termux System Notification
+def send_termux_notification(title: str, content: str) -> bool:
+    """
+    Sends an Android system notification via Termux API (`termux-notification`).
+    Ensures high priority display, alert sound, and vibration on Android lock screen.
+    """
+    cmd = shutil.which("termux-notification")
+    if cmd:
+        try:
+            notif_args = [
+                cmd,
+                "--title", title,
+                "--content", content,
+                "--priority", "high",
+                "--sound",
+                "--vibrate", "500,500,500",
+                "--id", "termux_price_alert"
+            ]
+            subprocess.run(notif_args, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return True
         except Exception:
             pass
@@ -260,10 +285,9 @@ def play_termux_sound(text_message: str = "Price alert triggered!") -> dict:
     """
     Plays audio sound alerts utilizing Termux capabilities:
     1. termux-media-player or command line audio players with generated PCM WAV tone
-    2. termux-notification with sound and vibration
-    3. Terminal acoustic bell (\a) fallback
+    2. Terminal acoustic bell (\a) fallback
     """
-    results = {"media": False, "notification": False, "bell": False}
+    results = {"media": False, "bell": False}
 
     # 1. Termux Media Player / CLI Audio Player with generated WAV tone
     player_cmd = (
@@ -296,23 +320,7 @@ def play_termux_sound(text_message: str = "Price alert triggered!") -> dict:
     except Exception:
         pass
 
-    # 2. Termux system notification with sound & vibration
-    notif_cmd = shutil.which("termux-notification")
-    if notif_cmd:
-        try:
-            cmd = [
-                notif_cmd,
-                "--title", "Price Alert Triggered",
-                "--content", text_message,
-                "--sound",
-                "--vibrate", "500,500"
-            ]
-            subprocess.run(cmd, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            results["notification"] = True
-        except Exception:
-            pass
-
-    # 3. Terminal acoustic bell (\a)
+    # 2. Terminal acoustic bell (\a)
     try:
         for _ in range(5):
             sys.stdout.write("\a")
@@ -472,6 +480,7 @@ def start_live_monitoring(rules: list):
                     print(f" *** TRIGGER FIRED: {msg} ***")
                     print("!" * 60 + "\n")
                     play_termux_sound(msg)
+                    send_termux_notification(f"Price Alert: {ev['symbol']}", msg)
             else:
                 print(" No active rules configured.")
 
@@ -500,7 +509,7 @@ def run_main_menu():
         print(" 3) Enable / Disable Rule")
         print(" 4) Remove Rule")
         print(" 5) Start Continuous Monitoring")
-        print(" 6) Test Termux Audio Sound")
+        print(" 6) Test Termux Audio Sound & Notification")
         print(" 0) Exit")
         print("=" * 50)
 
@@ -518,9 +527,10 @@ def run_main_menu():
         elif choice == "5":
             start_live_monitoring(rules)
         elif choice == "6":
-            print("\nExecuting Termux sound test...")
+            print("\nExecuting Termux sound & notification test...")
             res = play_termux_sound("Termux sound test in progress")
-            print(f"Sound test result: {res}\n")
+            notif_sent = send_termux_notification("Termux Alert Test", "Sound & Notification test in progress")
+            print(f"Sound test result: {res}, Notification sent: {notif_sent}\n")
         elif choice == "0":
             print("\nExiting Termux Price Alert Monitor. Goodbye!")
             break

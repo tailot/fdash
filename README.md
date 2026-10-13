@@ -83,7 +83,8 @@ Features available in Termux Terminal mode:
 - Interactive terminal menu to view, add, toggle, and remove alert rules.
 - Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
 - Zero external Python package requirements (pure Python 3 standard library).
-- Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, system sound/vibration notifications, and terminal acoustic bells `\a`).
+- Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, and terminal acoustic bells `\a`).
+- Android system notifications with sound and vibration via `termux-notification`.
 - Background lock screen execution via automatic CPU WakeLock (`termux-wake-lock`).
 - Atomic JSON rule persistence (`termux_alerts_config.json`).
 
