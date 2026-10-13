@@ -605,7 +605,7 @@ def test_termux_alerts_audio_and_beep(monkeypatch):
         sub_calls.append(cmd)
 
     monkeypatch.setattr(ta.subprocess, "run", mock_run)
-    res = ta.play_termux_sound("Test alert")
+    res = ta.play_termux_sound()
     assert res["media"]
     assert res["bell"]
     assert len(sub_calls) >= 1
@@ -627,6 +627,8 @@ def test_termux_alerts_send_notification(monkeypatch):
     assert "Title Test" in calls[0]
     assert "--content" in calls[0]
     assert "Content Test" in calls[0]
+    assert "--id" in calls[0]
+    assert "123" in calls[0]
 
 
 def test_termux_alerts_wake_lock(monkeypatch):

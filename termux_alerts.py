@@ -97,25 +97,19 @@ def release_wake_lock() -> bool:
 def send_termux_notification(title: str, content: str) -> bool:
     """
     Sends an Android system notification via Termux API (`termux-notification`).
-    Ensures high priority display, alert sound, and vibration on Android lock screen.
     """
-    cmd = shutil.which("termux-notification")
-    if cmd:
-        try:
-            notif_args = [
-                cmd,
-                "--title", title,
-                "--content", content,
-                "--priority", "high",
-                "--sound",
-                "--vibrate", "500,500,500",
-                "--id", "termux_price_alert"
-            ]
-            subprocess.run(notif_args, check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return True
-        except Exception:
-            pass
-    return False
+    cmd = shutil.which("termux-notification") or "termux-notification"
+    notif_args = [
+        cmd,
+        "--title", title,
+        "--content", content,
+        "--id", "123"
+    ]
+    try:
+        subprocess.run(notif_args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, Exception):
+        return False
 
 
 # ----------------------------------------------------------------------------- Rules & Persistence
@@ -281,7 +275,7 @@ def generate_beep_wav(freq: float = 880.0, beep_s: float = 0.25, gap_s: float = 
     return buf.getvalue()
 
 
-def play_termux_sound(text_message: str = "Price alert triggered!") -> dict:
+def play_termux_sound() -> dict:
     """
     Plays audio sound alerts utilizing Termux capabilities:
     1. termux-media-player or command line audio players with generated PCM WAV tone
@@ -479,7 +473,7 @@ def start_live_monitoring(rules: list):
                     print("\n" + "!" * 60)
                     print(f" *** TRIGGER FIRED: {msg} ***")
                     print("!" * 60 + "\n")
-                    play_termux_sound(msg)
+                    play_termux_sound()
                     send_termux_notification(f"Price Alert: {ev['symbol']}", msg)
             else:
                 print(" No active rules configured.")
@@ -528,7 +522,7 @@ def run_main_menu():
             start_live_monitoring(rules)
         elif choice == "6":
             print("\nExecuting Termux sound & notification test...")
-            res = play_termux_sound("Termux sound test in progress")
+            res = play_termux_sound()
             notif_sent = send_termux_notification("Termux Alert Test", "Sound & Notification test in progress")
             print(f"Sound test result: {res}, Notification sent: {notif_sent}\n")
         elif choice == "0":
