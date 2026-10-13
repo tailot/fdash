@@ -57,6 +57,38 @@ The application will automatically open in your browser at `http://localhost:850
 
 ---
 
+## 📱 Running on Termux (Android)
+
+> ⚠️ **Important Notice for Termux Users**:
+> When running on **Termux** (in terminal mode), **ONLY the standalone Price Alert functionality is available** (`termux_alerts.py`). The Streamlit web graphical user interface and heavy machine learning forecast modules are intentionally excluded in this terminal mode to keep execution lightweight and dependency-free.
+
+### Automated Launch via `termux_run`
+In Termux, launch the standalone monitor using the automated script `./termux_run`:
+
+```bash
+chmod +x termux_run
+./termux_run
+```
+
+The launcher verifies the Termux environment and directly launches `termux_alerts.py` without requiring any external Python package installations (`pandas`, `numpy`, or `yfinance`).
+
+### Manual Launch
+To start the price alert terminal monitor directly:
+
+```bash
+python3 termux_alerts.py
+```
+
+Features available in Termux Terminal mode:
+- Interactive terminal menu to view, add, toggle, and remove alert rules.
+- Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
+- Zero external Python package requirements (pure Python 3 standard library).
+- Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, system sound/vibration notifications, and terminal acoustic bells `\a`).
+- Background lock screen execution via automatic CPU WakeLock (`termux-wake-lock`).
+- Atomic JSON rule persistence (`termux_alerts_config.json`).
+
+---
+
 ## 🐳 Running with Docker
 
 You can run the application in an isolated and automated environment using **Docker** or **Docker Compose**.
@@ -259,7 +291,9 @@ pytest test_modules.py
 ├── requirements-timesfm.txt # Optional dependencies for real TimesFM-3 model
 ├── Dockerfile               # Docker container definition
 ├── docker-compose.yml       # Docker Compose service definition
-├── termuxrun.sh             # Automated setup and launcher script for Termux on Android
+├── termux_alerts.py         # Standalone terminal price alert monitor for Termux
+├── termux_run               # Pure stdlib Termux alert monitor launcher
+├── termuxrun.sh             # Automated setup and launcher script for Streamlit on Termux
 └── README.md                # Project documentation and usage guide
 ```
 

@@ -357,6 +357,26 @@ def test_alert_fires_once_and_rearms():
     assert ae.rule_key(rules[0]) in fired
 
 
+def test_worker_cycle_retains_prices(monkeypatch, tmp_path):
+    state_file = str(tmp_path / "alerts_state.json")
+    rules_file = str(tmp_path / "alerts_config.json")
+    monkeypatch.setattr(ae, "STATE_PATH", state_file)
+
+    rules_df = pd.DataFrame([{"symbol": "AAPL", "condition": ">=", "target": 200.0, "active": True}])
+    ae.save_rules(rules_df, rules_file)
+
+    # First cycle starting with initial state on disk
+    init_state = ae.load_state(state_file)
+    ae.save_state(init_state, state_file)
+
+    def fake_fetch(symbols):
+        return {"AAPL": 210.50}
+
+    state = ae.load_state(state_file)
+    updated_state = ae.worker_cycle(state, rules_path=rules_file, fetch=fake_fetch, notify=lambda e: {})
+    assert updated_state["prices"] == {"AAPL": 210.50}
+
+
 def test_fetch_last_prices_single_batched_call(monkeypatch):
     calls = []
     idx = pd.date_range("2026-10-06 14:30", periods=3, freq="min", tz="UTC")
@@ -456,3 +476,152 @@ def test_discover_filter_stocks():
     )
     assert len(f2) == 2
     assert {s["Ticker"] for s in f2} == {"PLTR", "SMALL"}
+
+
+# ------------------------------------------------------------------ Termux Alerts Tests
+import termux_alerts as ta
+
+
+def test_termux_alerts_environment_detection(monkeypatch):
+    class FakeTTY:
+        def isatty(self):
+            return True
+
+    class FakeNonTTY:
+        def isatty(self):
+            return False
+
+    # Scenario 1: In Termux + TTY -> True
+    monkeypatch.setattr(ta.sys, "stdout", FakeTTY())
+    monkeypatch.setenv("TERMUX_VERSION", "0.118")
+    assert ta.is_termux_terminal()
+
+    # Scenario 2: In Termux + non-TTY -> False
+    monkeypatch.setattr(ta.sys, "stdout", FakeNonTTY())
+    assert not ta.is_termux_terminal()
+
+    # Scenario 3: Not in Termux + TTY -> False
+    monkeypatch.delenv("TERMUX_VERSION", raising=False)
+    monkeypatch.delenv("PREFIX", raising=False)
+    monkeypatch.setattr(ta.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(ta.sys, "stdout", FakeTTY())
+    assert not ta.is_termux_terminal()
+
+    # Scenario 4: enforce_termux_environment exits when False
+    with pytest.raises(SystemExit):
+        ta.enforce_termux_environment()
+
+
+def test_termux_alerts_rules_and_persistence(tmp_path):
+    raw_rules = [
+        {"symbol": " msft ", "condition": ">=", "target": 300.0, "active": True},
+        {"symbol": "aapl", "condition": "<=", "target": 150.0, "active": False},
+        {"symbol": "invalid", "condition": "??", "target": 10.0},
+        "not_a_dict"
+    ]
+    cleaned = ta.normalize_rules(raw_rules)
+    assert len(cleaned) == 2
+    assert cleaned[0] == {"symbol": "MSFT", "condition": ">=", "target": 300.0, "active": True}
+    assert cleaned[1] == {"symbol": "AAPL", "condition": "<=", "target": 150.0, "active": False}
+
+    cfg = str(tmp_path / "termux_alerts.json")
+    assert ta.save_rules(raw_rules, cfg)
+    loaded = ta.load_rules(cfg)
+    assert loaded == cleaned
+
+    # Rule key & trigger logic
+    rule_bull = {"symbol": "MSFT", "condition": ">=", "target": 300.0, "active": True}
+    rule_bear = {"symbol": "AAPL", "condition": "<=", "target": 150.0, "active": True}
+    assert ta.rule_key(rule_bull) == "MSFT|>=|300.000000"
+    assert ta.is_triggered(rule_bull, 305.0)
+    assert not ta.is_triggered(rule_bull, 295.0)
+    assert ta.is_triggered(rule_bear, 145.0)
+    assert not ta.is_triggered(rule_bear, 155.0)
+
+
+def test_termux_alerts_rule_evaluation():
+    rules = [
+        {"symbol": "BTC", "condition": ">=", "target": 90000.0, "active": True},
+        {"symbol": "ETH", "condition": "<=", "target": 2500.0, "active": True},
+        {"symbol": "SOL", "condition": ">=", "target": 200.0, "active": False}
+    ]
+
+    # First evaluation: BTC triggers, ETH doesn't, SOL inactive
+    ev, fired = ta.evaluate_rules(rules, {"BTC": 91000.0, "ETH": 2600.0, "SOL": 250.0}, set())
+    assert len(ev) == 1
+    assert ev[0]["symbol"] == "BTC"
+    assert fired == {"BTC|>=|90000.000000"}
+
+    # Second evaluation: condition persists, no duplicate firing
+    ev2, fired2 = ta.evaluate_rules(rules, {"BTC": 92000.0, "ETH": 2600.0}, fired)
+    assert len(ev2) == 0
+    assert fired2 == fired
+
+    # Third evaluation: BTC drops below target -> re-arms
+    ev3, fired3 = ta.evaluate_rules(rules, {"BTC": 88000.0, "ETH": 2400.0}, fired)
+    assert len(ev3) == 1
+    assert ev3[0]["symbol"] == "ETH"
+    assert fired3 == {"ETH|<=|2500.000000"}
+
+
+def test_termux_alerts_fetch_single_price(monkeypatch):
+    class FakeHTTPResponse:
+        def __init__(self, data, status=200):
+            self.data = data
+            self.status = status
+
+        def read(self):
+            return self.data.encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    mock_json = '{"chart": {"result": [{"meta": {"regularMarketPrice": 175.50}}]}}'
+    monkeypatch.setattr(ta.urllib.request, "urlopen", lambda req, timeout=10: FakeHTTPResponse(mock_json))
+
+    sym, price = ta.fetch_single_price("aapl")
+    assert sym == "AAPL"
+    assert price == 175.50
+
+    prices = ta.fetch_last_prices(["AAPL", "MSFT"])
+    assert prices.get("AAPL") == 175.50
+
+
+def test_termux_alerts_audio_and_beep(monkeypatch):
+    import wave, io
+    wav_data = ta.generate_beep_wav()
+    with wave.open(io.BytesIO(wav_data)) as w:
+        assert w.getnchannels() == 1
+        assert w.getnframes() > 0
+
+    # Mock subprocess and shutil to test play_termux_sound
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    sub_calls = []
+
+    def mock_run(cmd, **kwargs):
+        sub_calls.append(cmd)
+
+    monkeypatch.setattr(ta.subprocess, "run", mock_run)
+    res = ta.play_termux_sound("Test alert")
+    assert res["media"]
+    assert res["notification"]
+    assert res["bell"]
+    assert len(sub_calls) >= 2
+
+
+def test_termux_alerts_wake_lock(monkeypatch):
+    calls = []
+
+    def mock_run(cmd, **kwargs):
+        calls.append(cmd[0])
+
+    monkeypatch.setattr(ta.subprocess, "run", mock_run)
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    assert ta.acquire_wake_lock()
+    assert ta.release_wake_lock()
+    assert "/usr/bin/termux-wake-lock" in calls[0]
+    assert "/usr/bin/termux-wake-unlock" in calls[1]
