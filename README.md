@@ -59,31 +59,32 @@ The application will automatically open in your browser at `http://localhost:850
 
 ## 📱 Running on Termux (Android)
 
-> ⚠️ **Avviso Importante per l'ambiente Termux**:
-> Quando si esegue il progetto su **Termux** (in modalità terminale), **è disponibile ESCLUSIVAMENTE la funzionalità di Price Alert** (`termux_alerts.py`). L'interfaccia grafica web Streamlit e i moduli avanzati di forecast e sentiment non sono disponibili in questa modalità terminale isolata.
+> ⚠️ **Important Notice for Termux Users**:
+> When running on **Termux** (in terminal mode), **ONLY the standalone Price Alert functionality is available** (`termux_alerts.py`). The Streamlit web graphical user interface and heavy machine learning forecast modules are intentionally excluded in this terminal mode to keep execution lightweight and dependency-free.
 
 ### Automated Launch via `termux_run`
-In Termux, you can use the automated launcher script `./termux_run`:
+In Termux, launch the standalone monitor using the automated script `./termux_run`:
 
 ```bash
 chmod +x termux_run
 ./termux_run
 ```
 
-The launcher automatically checks the Termux environment, installs missing packages (`python`, `pandas`, `yfinance`, `numpy`), and executes `termux_alerts.py`.
+The launcher verifies the Termux environment and directly launches `termux_alerts.py` without requiring any external Python package installations (`pandas`, `numpy`, or `yfinance`).
 
 ### Manual Launch
-To launch the price alert terminal monitor directly:
+To start the price alert terminal monitor directly:
 
 ```bash
 python3 termux_alerts.py
 ```
 
 Features available in Termux Terminal mode:
-- Interactive menu to view, add, toggle, and remove price alert rules.
-- Bullish (`>=`) and bearish (`<=`) target price tracking.
-- Audio alerts utilizing Termux capabilities (`termux-tts-speak` Text-to-Speech, media player tools, and terminal acoustic bell `\a`).
-- Automatic JSON persistence (`termux_alerts_config.json`).
+- Interactive terminal menu to view, add, toggle, and remove alert rules.
+- Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
+- Zero external Python package requirements (pure Python 3 standard library).
+- Audio notifications leveraging Termux tools (`termux-tts-speak` Text-to-Speech, media players, and terminal acoustic bell `\a`).
+- Atomic JSON rule persistence (`termux_alerts_config.json`).
 
 ---
 

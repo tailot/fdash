@@ -564,6 +564,32 @@ def test_termux_alerts_rule_evaluation():
     assert fired3 == {"ETH|<=|2500.000000"}
 
 
+def test_termux_alerts_fetch_single_price(monkeypatch):
+    class FakeHTTPResponse:
+        def __init__(self, data, status=200):
+            self.data = data
+            self.status = status
+
+        def read(self):
+            return self.data.encode("utf-8")
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+    mock_json = '{"chart": {"result": [{"meta": {"regularMarketPrice": 175.50}}]}}'
+    monkeypatch.setattr(ta.urllib.request, "urlopen", lambda req, timeout=10: FakeHTTPResponse(mock_json))
+
+    sym, price = ta.fetch_single_price("aapl")
+    assert sym == "AAPL"
+    assert price == 175.50
+
+    prices = ta.fetch_last_prices(["AAPL", "MSFT"])
+    assert prices.get("AAPL") == 175.50
+
+
 def test_termux_alerts_audio_and_beep(monkeypatch):
     import wave, io
     wav_data = ta.generate_beep_wav()

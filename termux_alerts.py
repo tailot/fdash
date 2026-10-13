@@ -15,25 +15,26 @@
 """
 Termux Standalone Terminal Price Alert Application.
 
-This module provides a terminal-only price alert monitoring system designed
-to run exclusively inside Termux on Android. Audio notifications leverage
-Termux capabilities (TTS text-to-speech, media player commands, terminal bells).
+This module provides a pure standard-library price alert monitoring system
+designed to run exclusively inside Termux on Android without requiring heavy
+third-party dependencies (e.g. pandas, numpy, yfinance). Audio notifications
+leverage Termux capabilities (TTS text-to-speech, media player commands, terminal bells).
 """
 
 import io
 import json
+import math
 import os
 import shutil
+import struct
 import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 import wave
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-
-import numpy as np
-import pandas as pd
-import yfinance as yf
 
 CONFIG_PATH = os.environ.get("TERMUX_ALERTS_FILE", "termux_alerts_config.json")
 POLL_INTERVAL_SECONDS = int(os.environ.get("TERMUX_ALERT_POLL_SECONDS", "60"))
@@ -59,9 +60,8 @@ def enforce_termux_environment():
     """Exits the script immediately if not running inside Termux in terminal mode."""
     if not is_termux_terminal():
         sys.stderr.write(
-            "\n[ERRORE] Questo script e' progettato per funzionare ESCLUSIVAMENTE "
-            "all'interno dell'ambiente Termux in modalita' terminale.\n"
-            "Esecuzione interrotta.\n\n"
+            "\n[ERROR] This script is designed to run EXCLUSIVELY inside the Termux environment in terminal mode.\n"
+            "Execution terminated.\n\n"
         )
         sys.exit(1)
 
@@ -163,57 +163,73 @@ def evaluate_rules(rules: list, prices: dict, fired: set):
     return events, new_fired
 
 
-# ----------------------------------------------------------------------------- Price Downloading
+# ----------------------------------------------------------------------------- Standard Library Price Downloading
+def fetch_single_price(symbol: str) -> tuple:
+    """Fetches the latest price for a single ticker symbol using Yahoo Finance JSON chart API."""
+    sym = symbol.strip().upper()
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{sym}?interval=1m&range=1d"
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
+    try:
+        with urllib.request.urlopen(req, timeout=10) as response:
+            if response.status == 200:
+                payload = json.loads(response.read().decode("utf-8"))
+                result = payload.get("chart", {}).get("result", [])
+                if result:
+                    meta = result[0].get("meta", {})
+                    if "regularMarketPrice" in meta and meta["regularMarketPrice"] is not None:
+                        return sym, float(meta["regularMarketPrice"])
+                    quotes = result[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+                    valid_closes = [c for c in quotes if c is not None]
+                    if valid_closes:
+                        return sym, float(valid_closes[-1])
+    except Exception:
+        pass
+    return sym, None
+
+
 def fetch_last_prices(symbols: list) -> dict:
-    """Fetches the latest available price for a list of symbols using yfinance."""
+    """Fetches the latest available price for a list of symbols in parallel using standard library ThreadPoolExecutor."""
     symbols = list(dict.fromkeys(s.strip().upper() for s in symbols if s and s.strip()))
     if not symbols:
         return {}
-    try:
-        raw = yf.download(
-            symbols,
-            period="1d",
-            interval="1m",
-            prepost=True,
-            auto_adjust=True,
-            progress=False,
-            threads=False
-        )
-        if raw is None or raw.empty:
-            return {}
-        close = raw["Close"]
-        if isinstance(close, pd.Series):
-            close = close.to_frame(symbols[0])
-        prices = {}
-        for s in symbols:
-            if s in close.columns:
-                series = close[s].dropna()
-                if not series.empty:
-                    prices[s] = float(series.iloc[-1])
-        return prices
-    except Exception:
-        return {}
+    prices = {}
+    with ThreadPoolExecutor(max_workers=min(len(symbols), 8)) as executor:
+        futures = [executor.submit(fetch_single_price, s) for s in symbols]
+        for future in as_completed(futures):
+            sym, price = future.result()
+            if price is not None:
+                prices[sym] = price
+    return prices
 
 
-# ----------------------------------------------------------------------------- Termux Audio Features
+# ----------------------------------------------------------------------------- Pure Standard Library Audio Generation
 def generate_beep_wav(freq: float = 880.0, beep_s: float = 0.25, gap_s: float = 0.1,
                       repeats: int = 3, rate: int = 22050) -> bytes:
-    """Generates a WAV audio buffer for an alert beep sound."""
-    t = np.linspace(0, beep_s, int(rate * beep_s), endpoint=False)
-    tone = 0.6 * np.sin(2 * np.pi * freq * t) * np.minimum(1, np.minimum(t, beep_s - t) * 80)
-    gap = np.zeros(int(rate * gap_s))
-    signal = np.concatenate([np.concatenate([tone, gap]) for _ in range(repeats)])
-    pcm = (signal * 32767).astype("<i2").tobytes()
+    """Generates a PCM WAV audio buffer using only standard library math, wave, and struct modules."""
     buf = io.BytesIO()
     with wave.open(buf, "wb") as w:
         w.setnchannels(1)
         w.setsampwidth(2)
         w.setframerate(rate)
-        w.writeframes(pcm)
+
+        beep_samples = int(rate * beep_s)
+        gap_samples = int(rate * gap_s)
+        frames = bytearray()
+
+        for _ in range(repeats):
+            for i in range(beep_samples):
+                t = i / rate
+                env = min(1.0, min(t, beep_s - t) * 80.0)
+                val = int(0.6 * env * math.sin(2 * math.pi * freq * t) * 32767)
+                val = max(-32768, min(32767, val))
+                frames.extend(struct.pack("<h", val))
+            frames.extend(struct.pack("<h", 0) * gap_samples)
+
+        w.writeframes(frames)
     return buf.getvalue()
 
 
-def play_termux_sound(text_message: str = "Alert prezzo scattato!") -> dict:
+def play_termux_sound(text_message: str = "Price alert triggered!") -> dict:
     """
     Plays audio alerts utilizing Termux capabilities:
     1. termux-tts-speak (Text-To-Speech)
@@ -279,109 +295,109 @@ def play_termux_sound(text_message: str = "Alert prezzo scattato!") -> dict:
 def display_rules_and_prices(rules: list, prices: dict = None):
     """Prints current alert rules and live prices to the terminal."""
     print("\n" + "=" * 60)
-    print("           REGOLE ALERT E ULTIMI PREZZI REGISTRATI")
+    print("           ALERT RULES & LATEST PRICES")
     print("=" * 60)
     if not rules:
-        print(" Nessuna regola configurata.")
+        print(" No alert rules configured.")
         print("=" * 60 + "\n")
         return
 
     prices = prices or {}
-    print(f"{'#':<3} {'Simbolo':<10} {'Condizione':<12} {'Target':<12} {'Prezzo Attuale':<15} {'Stato':<8}")
+    print(f"{'#':<3} {'Symbol':<10} {'Condition':<12} {'Target':<12} {'Current Price':<15} {'Status':<8}")
     print("-" * 60)
     for idx, r in enumerate(rules, start=1):
         sym = r["symbol"]
-        cond_str = "Rialzo (>=)" if r["condition"] == ">=" else "Ribasso (<=)"
+        cond_str = "Bullish (>=)" if r["condition"] == ">=" else "Bearish (<=)"
         target_str = f"{r['target']:.2f}"
         cur_p = prices.get(sym)
         p_str = f"{cur_p:.2f}" if cur_p is not None else "N/A"
-        active_str = "ATTIVO" if r.get("active", True) else "DISATTIVATO"
+        active_str = "ACTIVE" if r.get("active", True) else "DISABLED"
         print(f"{idx:<3} {sym:<10} {cond_str:<12} {target_str:<12} {p_str:<15} {active_str:<8}")
     print("=" * 60 + "\n")
 
 
 def prompt_add_rule(rules: list) -> list:
     """Prompt user to add a new alert rule."""
-    print("\n--- AGGIUNGI NUOVA REGOLA ALERT ---")
-    symbol = input("Inserisci Simbolo Ticker (es. AAPL, BTC-USD, MSTR): ").strip().upper()
+    print("\n--- ADD NEW ALERT RULE ---")
+    symbol = input("Enter Ticker Symbol (e.g. AAPL, BTC-USD, MSTR): ").strip().upper()
     if not symbol:
-        print("Simbolo non valido. Operazione annullata.")
+        print("Invalid symbol. Operation cancelled.")
         return rules
 
-    print("Tipo di direzione da tracciare:")
-    print("  1) Rialzo (Prezzo >= Target)")
-    print("  2) Ribasso (Prezzo <= Target)")
-    choice = input("Seleziona opzione (1 o 2): ").strip()
+    print("Direction to track:")
+    print("  1) Bullish (Price >= Target)")
+    print("  2) Bearish (Price <= Target)")
+    choice = input("Select option (1 or 2): ").strip()
     if choice == "1":
         condition = ">="
     elif choice == "2":
         condition = "<="
     else:
-        print("Opzione non valida. Operazione annullata.")
+        print("Invalid option. Operation cancelled.")
         return rules
 
-    target_raw = input("Inserisci Prezzo Target: ").strip()
+    target_raw = input("Enter Target Price: ").strip()
     try:
         target = float(target_raw)
         if target <= 0:
             raise ValueError
     except ValueError:
-        print("Prezzo target non valido. Operazione annullata.")
+        print("Invalid target price. Operation cancelled.")
         return rules
 
     new_rule = {"symbol": symbol, "condition": condition, "target": target, "active": True}
     rules.append(new_rule)
     save_rules(rules)
-    print(f"Regola per {symbol} ({condition} {target:.2f}) aggiunta con successo!")
+    print(f"Rule for {symbol} ({condition} {target:.2f}) added successfully!")
     return rules
 
 
 def prompt_toggle_rule(rules: list) -> list:
     """Prompt user to toggle rule active state."""
     if not rules:
-        print("\nNessuna regola da modificare.")
+        print("\nNo rules to modify.")
         return rules
     display_rules_and_prices(rules)
-    idx_raw = input("Inserisci il numero della regola da attivare/disattivare: ").strip()
+    idx_raw = input("Enter the rule number to enable/disable: ").strip()
     try:
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             rules[idx]["active"] = not rules[idx].get("active", True)
             save_rules(rules)
-            status = "ATTIVATA" if rules[idx]["active"] else "DISATTIVATA"
-            print(f"Regola per {rules[idx]['symbol']} impostata su: {status}")
+            status = "ACTIVE" if rules[idx]["active"] else "DISABLED"
+            print(f"Rule for {rules[idx]['symbol']} set to: {status}")
         else:
-            print("Numero regola non valido.")
+            print("Invalid rule number.")
     except ValueError:
-        print("Input non valido.")
+        print("Invalid input.")
     return rules
 
 
 def prompt_remove_rule(rules: list) -> list:
     """Prompt user to remove a rule."""
     if not rules:
-        print("\nNessuna regola da rimuovere.")
+        print("\nNo rules to remove.")
         return rules
     display_rules_and_prices(rules)
-    idx_raw = input("Inserisci il numero della regola da rimuovere: ").strip()
+    idx_raw = input("Enter the rule number to remove: ").strip()
     try:
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             removed = rules.pop(idx)
             save_rules(rules)
-            print(f"Regola per {removed['symbol']} rimossa con successo!")
+            print(f"Rule for {removed['symbol']} removed successfully!")
         else:
-            print("Numero regola non valido.")
+            print("Invalid rule number.")
     except ValueError:
-        print("Input non valido.")
+        print("Invalid input.")
     return rules
 
 
 def start_live_monitoring(rules: list):
     """Runs continuous real-time market polling loop for active alert rules."""
     print("\n" + "=" * 60)
-    print("      AVVIO MONITORAGGIO ALERT IN TEMPO REALE (TERMUX)")
-    print("      Premere Ctrl+C per interrompere e tornare al menu")
+    print("      STARTING REAL-TIME ALERT MONITORING (TERMUX)")
+    print("      Press Ctrl+C to stop and return to main menu")
     print("=" * 60 + "\n")
 
     fired = set()
@@ -395,7 +411,7 @@ def start_live_monitoring(rules: list):
 
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             poll_count += 1
-            print(f"[{now_str}] Check #{poll_count} - Download prezzi per {len(symbols)} simboli...")
+            print(f"[{now_str}] Poll #{poll_count} - Fetching prices for {len(symbols)} symbols...")
 
             if symbols:
                 prices = fetch_last_prices(symbols)
@@ -406,23 +422,23 @@ def start_live_monitoring(rules: list):
 
                 events, fired = evaluate_rules(active_rules, prices, fired)
                 for ev in events:
-                    direction = "RIALZO" if ev["condition"] == ">=" else "RIBASSO"
+                    direction = "BULLISH" if ev["condition"] == ">=" else "BEARISH"
                     msg = (
-                        f"ALERT {ev['symbol']}! Prezzo {ev['price']:.2f} "
-                        f"ha raggiunto il target a {direction} {ev['target']:.2f}"
+                        f"ALERT {ev['symbol']}! Price {ev['price']:.2f} "
+                        f"reached {direction} target {ev['condition']} {ev['target']:.2f}"
                     )
                     print("\n" + "!" * 60)
-                    print(f" *** TRIGGER SCATTATO: {msg} ***")
+                    print(f" *** TRIGGER FIRED: {msg} ***")
                     print("!" * 60 + "\n")
                     play_termux_sound(msg)
             else:
-                print(" Nessuna regola attiva al momento.")
+                print(" No active rules configured.")
 
-            print(f"Prossimo controllo tra {POLL_INTERVAL_SECONDS} secondi...\n")
+            print(f"Next check in {POLL_INTERVAL_SECONDS} seconds...\n")
             time.sleep(POLL_INTERVAL_SECONDS)
 
     except KeyboardInterrupt:
-        print("\n\nMonitoraggio interrotto dall'utente. Ritorno al menu principale.\n")
+        print("\n\nMonitoring stopped by user. Returning to main menu.\n")
 
 
 def run_main_menu():
@@ -434,16 +450,16 @@ def run_main_menu():
         print("\n" + "=" * 50)
         print("     TERMUX PRICE ALERT MONITOR (TERMINAL MODE)")
         print("=" * 50)
-        print(" 1) Visualizza Regole e Prezzi")
-        print(" 2) Aggiungi Nuova Regola Alert")
-        print(" 3) Attiva / Disattiva Regola")
-        print(" 4) Rimuovi Regola")
-        print(" 5) Avvia Monitoraggio Continuo")
-        print(" 6) Test Emissione Suono Termux")
-        print(" 0) Esci")
+        print(" 1) View Rules & Prices")
+        print(" 2) Add New Alert Rule")
+        print(" 3) Enable / Disable Rule")
+        print(" 4) Remove Rule")
+        print(" 5) Start Continuous Monitoring")
+        print(" 6) Test Termux Audio Sound")
+        print(" 0) Exit")
         print("=" * 50)
 
-        choice = input("Seleziona un'opzione [0-6]: ").strip()
+        choice = input("Select an option [0-6]: ").strip()
         if choice == "1":
             active_symbols = [r["symbol"] for r in rules if r.get("active", True)]
             prices = fetch_last_prices(active_symbols) if active_symbols else {}
@@ -457,14 +473,14 @@ def run_main_menu():
         elif choice == "5":
             start_live_monitoring(rules)
         elif choice == "6":
-            print("\nEsecuzione test suono Termux...")
-            res = play_termux_sound("Test suono alert Termux in corso")
-            print(f"Risultato test suono: {res}\n")
+            print("\nExecuting Termux sound test...")
+            res = play_termux_sound("Termux sound test in progress")
+            print(f"Sound test result: {res}\n")
         elif choice == "0":
-            print("\nChiusura Termux Price Alert Monitor. Arrivederci!")
+            print("\nExiting Termux Price Alert Monitor. Goodbye!")
             break
         else:
-            print("\nOpzione non valida. Riprova.")
+            print("\nInvalid option. Please try again.")
 
 
 if __name__ == "__main__":
