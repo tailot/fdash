@@ -1,10 +1,10 @@
 __pycache__/
 *.pyc
-.pytest_cache/
-streamlit.log
+.venv/
+.venv_termux/
+fdash_data/
+termux_alerts_config.json
 alerts_config.json
-alerts_vapid.json
-alerts_push_subs.json
 alerts_state.json
 .streamlit/secrets.toml
 *.db

@@ -407,7 +407,6 @@ def worker_cycle(state: dict, rules_path: str = None, fetch=None, notify=None, n
             state["fired"] = []
         if disk_state.get("prices") == {} and state.get("prices"):
             state["prices"] = {}
-
     rules = [r for r in normalize_rules(load_rules(rules_path)) if r["active"]]
     prices = {}
     state["last_error"] = None

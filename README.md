@@ -83,7 +83,9 @@ Features available in Termux Terminal mode:
 - Interactive terminal menu to view, add, toggle, and remove alert rules.
 - Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
 - Zero external Python package requirements (pure Python 3 standard library).
-- Audio notifications leveraging Termux tools (`termux-tts-speak` Text-to-Speech, media players, and terminal acoustic bell `\a`).
+- Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, and terminal acoustic bells `\a`).
+- Android system notifications with sound and vibration via `termux-notification`.
+- Background lock screen execution via automatic CPU WakeLock (`termux-wake-lock`).
 - Atomic JSON rule persistence (`termux_alerts_config.json`).
 
 ---
@@ -115,6 +117,44 @@ You can run the application in an isolated and automated environment using **Doc
    docker run -d -p 8501:8501 --name financial_dashboard financial-dashboard
    ```
 3. Open your browser at: `http://localhost:8501`
+
+---
+
+## 📱 Running on Termux (Android)
+
+You can run the dashboard natively on Android devices using **Termux**.
+
+### 1. Prerequisites on Android
+1. Install **Termux** (recommended from [F-Droid](https://f-droid.org/packages/com.termux/)).
+2. Open Termux and clone this repository:
+   ```bash
+   pkg update && pkg install -y git
+   git clone <repository_url>
+   cd fdash
+   ```
+
+### 2. Launching via `termuxrun.sh`
+Run the included launcher script:
+
+```bash
+chmod +x termuxrun.sh
+./termuxrun.sh
+```
+
+The script automatically detects the Termux environment, installs required system packages, sets up an isolated Python virtual environment, installs dependencies, and launches the Streamlit dashboard.
+
+#### Options:
+- **Enable TimesFM support:**
+  ```bash
+  ./termuxrun.sh --timesfm
+  ```
+- **Custom Port:**
+  ```bash
+  PORT=8502 ./termuxrun.sh
+  ```
+
+Once launched, open your browser on Android and navigate to:
+`http://localhost:8501`
 
 ---
 
@@ -252,6 +292,9 @@ pytest test_modules.py
 ├── requirements-timesfm.txt # Optional dependencies for real TimesFM-3 model
 ├── Dockerfile               # Docker container definition
 ├── docker-compose.yml       # Docker Compose service definition
+├── termux_alerts.py         # Standalone terminal price alert monitor for Termux
+├── termux_run               # Pure stdlib Termux alert monitor launcher
+├── termuxrun.sh             # Automated setup and launcher script for Streamlit on Termux
 └── README.md                # Project documentation and usage guide
 ```
 

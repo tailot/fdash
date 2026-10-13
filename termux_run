@@ -32,10 +32,11 @@ if ! command -v python3 &> /dev/null; then
     pkg update -y && pkg install -y python
 fi
 
-# Check optional Termux API package for text-to-speech support
-if ! command -v termux-tts-speak &> /dev/null; then
-    echo "[NOTICE] 'termux-tts-speak' command not found. To enable voice text-to-speech,"
-    echo "         install the 'termux-api' package (pkg install termux-api) and the Termux:API Android app."
+# Check optional Termux API commands for notifications and background lock screen support
+if ! command -v termux-notification &> /dev/null || ! command -v termux-wake-lock &> /dev/null; then
+    echo "[NOTICE] 'termux-notification' or 'termux-wake-lock' commands not found."
+    echo "         To enable system notifications and background execution when the screen is locked,"
+    echo "         install Termux:API (pkg install termux-api) and the Termux:API Android app."
 fi
 
 echo "[INFO] Launching termux_alerts.py in terminal mode..."

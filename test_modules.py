@@ -606,7 +606,39 @@ def test_termux_alerts_audio_and_beep(monkeypatch):
 
     monkeypatch.setattr(ta.subprocess, "run", mock_run)
     res = ta.play_termux_sound("Test alert")
-    assert res["tts"]
     assert res["media"]
     assert res["bell"]
-    assert len(sub_calls) >= 2
+    assert len(sub_calls) >= 1
+
+
+def test_termux_alerts_send_notification(monkeypatch):
+    calls = []
+
+    def mock_run(cmd, **kwargs):
+        calls.append(cmd)
+
+    monkeypatch.setattr(ta.subprocess, "run", mock_run)
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd == "termux-notification" else None)
+
+    assert ta.send_termux_notification("Title Test", "Content Test")
+    assert len(calls) == 1
+    assert calls[0][0] == "/usr/bin/termux-notification"
+    assert "--title" in calls[0]
+    assert "Title Test" in calls[0]
+    assert "--content" in calls[0]
+    assert "Content Test" in calls[0]
+
+
+def test_termux_alerts_wake_lock(monkeypatch):
+    calls = []
+
+    def mock_run(cmd, **kwargs):
+        calls.append(cmd[0])
+
+    monkeypatch.setattr(ta.subprocess, "run", mock_run)
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+
+    assert ta.acquire_wake_lock()
+    assert ta.release_wake_lock()
+    assert "/usr/bin/termux-wake-lock" in calls[0]
+    assert "/usr/bin/termux-wake-unlock" in calls[1]
