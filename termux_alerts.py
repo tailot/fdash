@@ -355,30 +355,34 @@ def display_rules_and_prices(rules: list, prices: dict = None):
 def prompt_add_rule(rules: list) -> list:
     """Prompt user to add a new alert rule."""
     print("\n--- ADD NEW ALERT RULE ---")
-    symbol = input("Enter Ticker Symbol (e.g. AAPL, BTC-USD, MSTR): ").strip().upper()
-    if not symbol:
-        print("Invalid symbol. Operation cancelled.")
-        return rules
-
-    print("Direction to track:")
-    print("  1) Bullish (Price >= Target)")
-    print("  2) Bearish (Price <= Target)")
-    choice = input("Select option (1 or 2): ").strip()
-    if choice == "1":
-        condition = ">="
-    elif choice == "2":
-        condition = "<="
-    else:
-        print("Invalid option. Operation cancelled.")
-        return rules
-
-    target_raw = input("Enter Target Price: ").strip()
     try:
-        target = float(target_raw)
-        if target <= 0:
-            raise ValueError
-    except ValueError:
-        print("Invalid target price. Operation cancelled.")
+        symbol = input("Enter Ticker Symbol (e.g. AAPL, BTC-USD, MSTR): ").strip().upper()
+        if not symbol:
+            print("Invalid symbol. Operation cancelled.")
+            return rules
+
+        print("Direction to track:")
+        print("  1) Bullish (Price >= Target)")
+        print("  2) Bearish (Price <= Target)")
+        choice = input("Select option (1 or 2): ").strip()
+        if choice == "1":
+            condition = ">="
+        elif choice == "2":
+            condition = "<="
+        else:
+            print("Invalid option. Operation cancelled.")
+            return rules
+
+        target_raw = input("Enter Target Price: ").strip()
+        try:
+            target = float(target_raw)
+            if target <= 0:
+                raise ValueError
+        except ValueError:
+            print("Invalid target price. Operation cancelled.")
+            return rules
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled.")
         return rules
 
     new_rule = {"symbol": symbol, "condition": condition, "target": target, "active": True}
@@ -394,8 +398,8 @@ def prompt_toggle_rule(rules: list) -> list:
         print("\nNo rules to modify.")
         return rules
     display_rules_and_prices(rules)
-    idx_raw = input("Enter the rule number to enable/disable: ").strip()
     try:
+        idx_raw = input("Enter the rule number to enable/disable: ").strip()
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             rules[idx]["active"] = not rules[idx].get("active", True)
@@ -404,6 +408,8 @@ def prompt_toggle_rule(rules: list) -> list:
             print(f"Rule for {rules[idx]['symbol']} set to: {status}")
         else:
             print("Invalid rule number.")
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled.")
     except ValueError:
         print("Invalid input.")
     return rules
@@ -415,8 +421,8 @@ def prompt_remove_rule(rules: list) -> list:
         print("\nNo rules to remove.")
         return rules
     display_rules_and_prices(rules)
-    idx_raw = input("Enter the rule number to remove: ").strip()
     try:
+        idx_raw = input("Enter the rule number to remove: ").strip()
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             removed = rules.pop(idx)
@@ -424,6 +430,8 @@ def prompt_remove_rule(rules: list) -> list:
             print(f"Rule for {removed['symbol']} removed successfully!")
         else:
             print("Invalid rule number.")
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled.")
     except ValueError:
         print("Invalid input.")
     return rules
@@ -507,7 +515,12 @@ def run_main_menu():
         print(" 0) Exit")
         print("=" * 50)
 
-        choice = input("Select an option [0-6]: ").strip()
+        try:
+            choice = input("Select an option [0-6]: ").strip()
+        except (KeyboardInterrupt, EOFError):
+            print("\nExiting Termux Price Alert Monitor. Goodbye!")
+            break
+
         if choice == "1":
             active_symbols = [r["symbol"] for r in rules if r.get("active", True)]
             prices = fetch_last_prices(active_symbols) if active_symbols else {}
@@ -533,4 +546,7 @@ def run_main_menu():
 
 
 if __name__ == "__main__":
-    run_main_menu()
+    try:
+        run_main_menu()
+    except (KeyboardInterrupt, EOFError):
+        print("\nExiting Termux Price Alert Monitor. Goodbye!")
