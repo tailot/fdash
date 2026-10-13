@@ -644,3 +644,40 @@ def test_termux_alerts_wake_lock(monkeypatch):
     assert ta.release_wake_lock()
     assert "/usr/bin/termux-wake-lock" in calls[0]
     assert "/usr/bin/termux-wake-unlock" in calls[1]
+
+
+def test_termux_alerts_keyboard_interrupt_and_eof(monkeypatch, capsys):
+    monkeypatch.setattr(ta, "enforce_termux_environment", lambda: None)
+
+    # Main menu input raises KeyboardInterrupt
+    monkeypatch.setattr("builtins.input", lambda prompt="": (_ for _ in ()).throw(KeyboardInterrupt))
+    ta.run_main_menu()
+    out, _ = capsys.readouterr()
+    assert "Exiting Termux Price Alert Monitor. Goodbye!" in out
+
+    # Main menu input raises EOFError
+    monkeypatch.setattr("builtins.input", lambda prompt="": (_ for _ in ()).throw(EOFError))
+    ta.run_main_menu()
+    out, _ = capsys.readouterr()
+    assert "Exiting Termux Price Alert Monitor. Goodbye!" in out
+
+    # prompt_add_rule handles KeyboardInterrupt
+    rules = []
+    res = ta.prompt_add_rule(rules)
+    out, _ = capsys.readouterr()
+    assert "Operation cancelled." in out
+    assert res == []
+
+    # prompt_toggle_rule handles KeyboardInterrupt
+    rules_toggle = [{"symbol": "AAPL", "condition": ">=", "target": 150.0, "active": True}]
+    res_toggle = ta.prompt_toggle_rule(rules_toggle)
+    out, _ = capsys.readouterr()
+    assert "Operation cancelled." in out
+    assert res_toggle[0]["active"] is True
+
+    # prompt_remove_rule handles KeyboardInterrupt
+    rules_remove = [{"symbol": "AAPL", "condition": ">=", "target": 150.0, "active": True}]
+    res_remove = ta.prompt_remove_rule(rules_remove)
+    out, _ = capsys.readouterr()
+    assert "Operation cancelled." in out
+    assert len(res_remove) == 1
