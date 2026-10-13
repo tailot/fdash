@@ -476,3 +476,111 @@ def test_discover_filter_stocks():
     )
     assert len(f2) == 2
     assert {s["Ticker"] for s in f2} == {"PLTR", "SMALL"}
+
+
+# ------------------------------------------------------------------ Termux Alerts Tests
+import termux_alerts as ta
+
+
+def test_termux_alerts_environment_detection(monkeypatch):
+    class FakeTTY:
+        def isatty(self):
+            return True
+
+    class FakeNonTTY:
+        def isatty(self):
+            return False
+
+    # Scenario 1: In Termux + TTY -> True
+    monkeypatch.setattr(ta.sys, "stdout", FakeTTY())
+    monkeypatch.setenv("TERMUX_VERSION", "0.118")
+    assert ta.is_termux_terminal()
+
+    # Scenario 2: In Termux + non-TTY -> False
+    monkeypatch.setattr(ta.sys, "stdout", FakeNonTTY())
+    assert not ta.is_termux_terminal()
+
+    # Scenario 3: Not in Termux + TTY -> False
+    monkeypatch.delenv("TERMUX_VERSION", raising=False)
+    monkeypatch.delenv("PREFIX", raising=False)
+    monkeypatch.setattr(ta.os.path, "exists", lambda p: False)
+    monkeypatch.setattr(ta.sys, "stdout", FakeTTY())
+    assert not ta.is_termux_terminal()
+
+    # Scenario 4: enforce_termux_environment exits when False
+    with pytest.raises(SystemExit):
+        ta.enforce_termux_environment()
+
+
+def test_termux_alerts_rules_and_persistence(tmp_path):
+    raw_rules = [
+        {"symbol": " msft ", "condition": ">=", "target": 300.0, "active": True},
+        {"symbol": "aapl", "condition": "<=", "target": 150.0, "active": False},
+        {"symbol": "invalid", "condition": "??", "target": 10.0},
+        "not_a_dict"
+    ]
+    cleaned = ta.normalize_rules(raw_rules)
+    assert len(cleaned) == 2
+    assert cleaned[0] == {"symbol": "MSFT", "condition": ">=", "target": 300.0, "active": True}
+    assert cleaned[1] == {"symbol": "AAPL", "condition": "<=", "target": 150.0, "active": False}
+
+    cfg = str(tmp_path / "termux_alerts.json")
+    assert ta.save_rules(raw_rules, cfg)
+    loaded = ta.load_rules(cfg)
+    assert loaded == cleaned
+
+    # Rule key & trigger logic
+    rule_bull = {"symbol": "MSFT", "condition": ">=", "target": 300.0, "active": True}
+    rule_bear = {"symbol": "AAPL", "condition": "<=", "target": 150.0, "active": True}
+    assert ta.rule_key(rule_bull) == "MSFT|>=|300.000000"
+    assert ta.is_triggered(rule_bull, 305.0)
+    assert not ta.is_triggered(rule_bull, 295.0)
+    assert ta.is_triggered(rule_bear, 145.0)
+    assert not ta.is_triggered(rule_bear, 155.0)
+
+
+def test_termux_alerts_rule_evaluation():
+    rules = [
+        {"symbol": "BTC", "condition": ">=", "target": 90000.0, "active": True},
+        {"symbol": "ETH", "condition": "<=", "target": 2500.0, "active": True},
+        {"symbol": "SOL", "condition": ">=", "target": 200.0, "active": False}
+    ]
+
+    # First evaluation: BTC triggers, ETH doesn't, SOL inactive
+    ev, fired = ta.evaluate_rules(rules, {"BTC": 91000.0, "ETH": 2600.0, "SOL": 250.0}, set())
+    assert len(ev) == 1
+    assert ev[0]["symbol"] == "BTC"
+    assert fired == {"BTC|>=|90000.000000"}
+
+    # Second evaluation: condition persists, no duplicate firing
+    ev2, fired2 = ta.evaluate_rules(rules, {"BTC": 92000.0, "ETH": 2600.0}, fired)
+    assert len(ev2) == 0
+    assert fired2 == fired
+
+    # Third evaluation: BTC drops below target -> re-arms
+    ev3, fired3 = ta.evaluate_rules(rules, {"BTC": 88000.0, "ETH": 2400.0}, fired)
+    assert len(ev3) == 1
+    assert ev3[0]["symbol"] == "ETH"
+    assert fired3 == {"ETH|<=|2500.000000"}
+
+
+def test_termux_alerts_audio_and_beep(monkeypatch):
+    import wave, io
+    wav_data = ta.generate_beep_wav()
+    with wave.open(io.BytesIO(wav_data)) as w:
+        assert w.getnchannels() == 1
+        assert w.getnframes() > 0
+
+    # Mock subprocess and shutil to test play_termux_sound
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}")
+    sub_calls = []
+
+    def mock_run(cmd, **kwargs):
+        sub_calls.append(cmd)
+
+    monkeypatch.setattr(ta.subprocess, "run", mock_run)
+    res = ta.play_termux_sound("Test alert")
+    assert res["tts"]
+    assert res["media"]
+    assert res["bell"]
+    assert len(sub_calls) >= 2
