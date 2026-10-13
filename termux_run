@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Copyright (c) 2026 Vincenzo Tilotta
+#
+# Permission to use, copy, modify, and/or distribute this software for any
+# purpose with or without fee is hereby granted, provided that the above
+# copyright notice and this permission notice appear in all copies.
+#
+# THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
+# WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
+# MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
+# ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
+# WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
+# ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
+# OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+
+set -e
+
+echo "===================================================="
+echo "    TERMUX PRICE ALERT MONITOR - LAUNCHER SCRIPT    "
+echo "===================================================="
+
+# Check Termux environment
+if [ -z "$TERMUX_VERSION" ] && [[ "$PREFIX" != *"com.termux"* ]] && [ ! -d "/data/data/com.termux" ]; then
+    echo "[ERROR] This script is designed to run EXCLUSIVELY inside Termux."
+    echo "Execution terminated."
+    exit 1
+fi
+
+# Ensure Python 3 is installed
+if ! command -v python3 &> /dev/null; then
+    echo "[INFO] Python 3 not found. Installing via pkg..."
+    pkg update -y && pkg install -y python
+fi
+
+# Check optional Termux API package for text-to-speech support
+if ! command -v termux-tts-speak &> /dev/null; then
+    echo "[NOTICE] 'termux-tts-speak' command not found. To enable voice text-to-speech,"
+    echo "         install the 'termux-api' package (pkg install termux-api) and the Termux:API Android app."
+fi
+
+echo "[INFO] Launching termux_alerts.py in terminal mode..."
+echo ""
+
+exec python3 termux_alerts.py "$@"
