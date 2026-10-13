@@ -57,6 +57,36 @@ The application will automatically open in your browser at `http://localhost:850
 
 ---
 
+## 📱 Running on Termux (Android)
+
+> ⚠️ **Avviso Importante per l'ambiente Termux**:
+> Quando si esegue il progetto su **Termux** (in modalità terminale), **è disponibile ESCLUSIVAMENTE la funzionalità di Price Alert** (`termux_alerts.py`). L'interfaccia grafica web Streamlit e i moduli avanzati di forecast e sentiment non sono disponibili in questa modalità terminale isolata.
+
+### Automated Launch via `termux_run`
+In Termux, you can use the automated launcher script `./termux_run`:
+
+```bash
+chmod +x termux_run
+./termux_run
+```
+
+The launcher automatically checks the Termux environment, installs missing packages (`python`, `pandas`, `yfinance`, `numpy`), and executes `termux_alerts.py`.
+
+### Manual Launch
+To launch the price alert terminal monitor directly:
+
+```bash
+python3 termux_alerts.py
+```
+
+Features available in Termux Terminal mode:
+- Interactive menu to view, add, toggle, and remove price alert rules.
+- Bullish (`>=`) and bearish (`<=`) target price tracking.
+- Audio alerts utilizing Termux capabilities (`termux-tts-speak` Text-to-Speech, media player tools, and terminal acoustic bell `\a`).
+- Automatic JSON persistence (`termux_alerts_config.json`).
+
+---
+
 ## 🐳 Running with Docker
 
 You can run the application in an isolated and automated environment using **Docker** or **Docker Compose**.
