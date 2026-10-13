@@ -9,3 +9,4 @@ alerts_state.json
 .streamlit/secrets.toml
 *.db
 analysis_history.db
+.clinerules
