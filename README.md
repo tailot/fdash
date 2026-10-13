@@ -85,6 +85,7 @@ Features available in Termux Terminal mode:
 - Zero external Python package requirements (pure Python 3 standard library).
 - Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, and terminal acoustic bells `\a`).
 - Android system notifications with sound and vibration via `termux-notification`.
+  - **Permissions Note**: Ensure system notification permissions are manually granted to **Termux** in your Android settings.
 - Background lock screen execution via automatic CPU WakeLock (`termux-wake-lock`).
 - Atomic JSON rule persistence (`termux_alerts_config.json`).
 
