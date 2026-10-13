@@ -509,7 +509,7 @@ def run_main_menu():
         print(" 3) Enable / Disable Rule")
         print(" 4) Remove Rule")
         print(" 5) Start Continuous Monitoring")
-        print(" 6) Test Termux Audio Sound & Notification")
+        print(" 6) Test Termux Audio Sound")
         print(" 0) Exit")
         print("=" * 50)
 
