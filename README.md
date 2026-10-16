@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="static/logo.svg" alt="fdash logo" width="180" />
+</p>
+
 # Integrated Financial Analysis Master Dashboard
 
 Interactive web application built with **Python** and **Streamlit** that acts as a **Financial Analysis Master Dashboard**.
