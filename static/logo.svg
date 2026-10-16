@@ -1,0 +1,234 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
+  <defs>
+    <!-- Background Glow -->
+    <radialGradient id="bgGlow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#3B82F6" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#3B82F6" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Horn Gradient -->
+    <linearGradient id="hornGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FDE047"/>
+      <stop offset="100%" stop-color="#F59E0B"/>
+    </linearGradient>
+
+    <!-- Bull Body Gradient -->
+    <linearGradient id="bullBody" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#475569"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+
+    <!-- Bull Snout Gradient -->
+    <linearGradient id="bullSnout" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#E2E8F0"/>
+      <stop offset="100%" stop-color="#94A3B8"/>
+    </linearGradient>
+
+    <!-- Chart Board Gradient -->
+    <linearGradient id="boardGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A"/>
+      <stop offset="100%" stop-color="#1E293B"/>
+    </linearGradient>
+
+    <!-- Chart Line Gradient -->
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#22C55E"/>
+      <stop offset="100%" stop-color="#4ADE80"/>
+    </linearGradient>
+
+    <!-- Chart Area Fill -->
+    <linearGradient id="chartAreaGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#22C55E" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#22C55E" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- Shoe Gradient -->
+    <linearGradient id="shoeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#EF4444"/>
+      <stop offset="100%" stop-color="#B91C1C"/>
+    </linearGradient>
+
+    <!-- Shadow Filter -->
+    <filter id="dropShadow" x="-15%" y="-15%" width="130%" height="130%">
+      <feDropShadow dx="2" dy="5" stdDeviation="5" flood-opacity="0.25"/>
+    </filter>
+
+    <!-- Glow Filter -->
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="4" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background Soft Aura -->
+  <circle cx="256" cy="256" r="230" fill="url(#bgGlow)" />
+
+  <!-- Dynamic Motion Dust / Speed Lines -->
+  <path d="M 60 410 Q 80 405 100 410" stroke="#CBD5E1" stroke-width="4" stroke-linecap="round" opacity="0.6"/>
+  <path d="M 40 425 Q 70 420 90 425" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+  <path d="M 75 438 Q 95 435 110 438" stroke="#CBD5E1" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+
+  <!-- Character Ground Shadow -->
+  <ellipse cx="245" cy="445" rx="125" ry="15" fill="#0F172A" opacity="0.2"/>
+
+  <!-- Back Arm holding side of chart -->
+  <g>
+    <path d="M 200 260 Q 235 245 270 265" fill="none" stroke="#334155" stroke-width="20" stroke-linecap="round"/>
+    <circle cx="272" cy="266" r="12" fill="#94A3B8"/>
+  </g>
+
+  <!-- Back Leg (Walking - moving backward) -->
+  <g>
+    <path d="M 200 340 L 165 418" stroke="#1E293B" stroke-width="26" stroke-linecap="round"/>
+    <!-- Back Shoe -->
+    <path d="M 140 412 C 140 402 155 402 170 407 L 175 428 C 155 432 140 426 140 412 Z" fill="url(#shoeGrad)"/>
+    <ellipse cx="157" cy="426" rx="16" ry="4" fill="#FFFFFF"/>
+  </g>
+
+  <!-- Tail with lively curve -->
+  <path d="M 175 300 C 120 300 100 240 120 220 C 125 215 135 220 130 228 C 115 240 130 285 175 288" fill="none" stroke="#334155" stroke-width="8" stroke-linecap="round"/>
+  <path d="M 120 220 Q 115 208 126 205 Q 132 215 120 220 Z" fill="#F59E0B"/>
+
+  <!-- Main Body / Torso & Neck -->
+  <!-- Neck connector -->
+  <path d="M 165 210 L 225 210 L 235 260 L 160 260 Z" fill="url(#bullBody)"/>
+  <!-- Torso -->
+  <path d="M 160 240 C 150 310 175 365 225 360 C 255 355 265 310 245 240 Z" fill="url(#bullBody)" filter="url(#dropShadow)"/>
+
+  <!-- Hoodie Pocket / Detail -->
+  <path d="M 175 300 Q 200 315 225 300 L 220 338 Q 195 348 175 338 Z" fill="#334155" opacity="0.8"/>
+  <!-- Collar Accent -->
+  <path d="M 188 230 L 198 258 L 208 230 Z" fill="#38BDF8"/>
+
+  <!-- Front Leg (Walking - moving forward) -->
+  <g>
+    <path d="M 230 340 L 270 420" stroke="#334155" stroke-width="28" stroke-linecap="round"/>
+    <!-- Front Shoe (Sneaker) -->
+    <path d="M 252 414 C 252 400 272 398 297 408 C 307 412 307 428 287 430 L 257 428 C 247 426 250 418 252 414 Z" fill="url(#shoeGrad)" filter="url(#dropShadow)"/>
+    <path d="M 252 424 L 300 424 C 304 424 304 430 297 431 L 254 431 Z" fill="#FFFFFF"/>
+    <!-- Toe Cap -->
+    <path d="M 287 409 C 297 411 302 418 297 424 L 284 424 Z" fill="#F8FAFC"/>
+  </g>
+
+  <!-- Head Group -->
+  <g filter="url(#dropShadow)">
+    <!-- Ears -->
+    <!-- Left Ear -->
+    <path d="M 150 170 Q 115 160 130 185 Q 150 190 160 180 Z" fill="#334155"/>
+    <path d="M 145 172 Q 125 165 135 182 Z" fill="#F43F5E" opacity="0.6"/>
+    <!-- Right Ear -->
+    <path d="M 230 165 Q 265 150 255 180 Q 235 185 225 175 Z" fill="#475569"/>
+    <path d="M 233 168 Q 255 158 247 178 Z" fill="#F43F5E" opacity="0.6"/>
+
+    <!-- Horns -->
+    <!-- Left Horn -->
+    <path d="M 157 155 C 145 120 115 115 110 125 C 120 140 143 150 153 160 Z" fill="url(#hornGrad)"/>
+    <!-- Right Horn -->
+    <path d="M 217 150 C 230 110 260 100 267 110 C 255 128 233 142 223 155 Z" fill="url(#hornGrad)"/>
+
+    <!-- Head Base -->
+    <ellipse cx="190" cy="180" rx="45" ry="40" fill="url(#bullBody)"/>
+
+    <!-- Snout / Muzzle -->
+    <ellipse cx="190" cy="200" rx="32" ry="22" fill="url(#bullSnout)"/>
+    <!-- Nostrils -->
+    <ellipse cx="178" cy="202" rx="4" ry="6" fill="#475569"/>
+    <ellipse cx="202" cy="202" rx="4" ry="6" fill="#475569"/>
+    <!-- Golden Nose Ring -->
+    <path d="M 182 210 A 10 10 0 0 0 198 210" fill="none" stroke="#F59E0B" stroke-width="4" stroke-linecap="round"/>
+
+    <!-- Eyes (Big, friendly, enthusiastic cartoon eyes) -->
+    <!-- Left Eye -->
+    <ellipse cx="173" cy="170" rx="12" ry="16" fill="#FFFFFF"/>
+    <ellipse cx="176" cy="170" rx="7" ry="10" fill="#0F172A"/>
+    <circle cx="178" cy="166" r="3" fill="#FFFFFF"/>
+    <circle cx="174" cy="174" r="1.5" fill="#FFFFFF"/>
+
+    <!-- Right Eye -->
+    <ellipse cx="207" cy="168" rx="12" ry="16" fill="#FFFFFF"/>
+    <ellipse cx="205" cy="168" rx="7" ry="10" fill="#0F172A"/>
+    <circle cx="207" cy="164" r="3" fill="#FFFFFF"/>
+    <circle cx="203" cy="172" r="1.5" fill="#FFFFFF"/>
+
+    <!-- Eyebrows (Determined & happy) -->
+    <path d="M 161 150 Q 175 145 185 154" fill="none" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round"/>
+    <path d="M 195 153 Q 207 145 219 148" fill="none" stroke="#0F172A" stroke-width="3.5" stroke-linecap="round"/>
+
+    <!-- Cheerful Mouth Smile -->
+    <path d="M 178 212 Q 190 222 202 212" fill="none" stroke="#1E293B" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <!-- FINANCIAL CHART BOARD (Carried proudly by character) -->
+  <g transform="rotate(-6 350 270)" filter="url(#dropShadow)">
+    <!-- Outer Board Frame -->
+    <rect x="245" y="155" width="215" height="155" rx="16" fill="url(#boardGrad)" stroke="#38BDF8" stroke-width="3.5"/>
+
+    <!-- Inner Glass Display -->
+    <rect x="253" y="163" width="199" height="139" rx="10" fill="#090D16"/>
+
+    <!-- Chart Grid Lines -->
+    <line x1="265" y1="195" x2="442" y2="195" stroke="#1E293B" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <line x1="265" y1="225" x2="442" y2="225" stroke="#1E293B" stroke-width="1.5" stroke-dasharray="4 4"/>
+    <line x1="265" y1="255" x2="442" y2="255" stroke="#1E293B" stroke-width="1.5" stroke-dasharray="4 4"/>
+
+    <!-- Volume Bars at Bottom -->
+    <rect x="270" y="258" width="12" height="24" rx="2" fill="#38BDF8" opacity="0.5"/>
+    <rect x="290" y="246" width="12" height="36" rx="2" fill="#22C55E" opacity="0.7"/>
+    <rect x="310" y="264" width="12" height="18" rx="2" fill="#EF4444" opacity="0.5"/>
+    <rect x="330" y="238" width="12" height="44" rx="2" fill="#22C55E" opacity="0.8"/>
+    <rect x="350" y="228" width="12" height="54" rx="2" fill="#22C55E" opacity="0.9"/>
+    <rect x="370" y="218" width="12" height="64" rx="2" fill="#22C55E" opacity="0.9"/>
+    <rect x="390" y="198" width="12" height="84" rx="2" fill="#22C55E" opacity="1.0" filter="url(#glow)"/>
+    <rect x="410" y="183" width="12" height="99" rx="2" fill="#4ADE80" filter="url(#glow)"/>
+
+    <!-- Area under line chart -->
+    <path d="M 270 250 L 300 235 L 325 243 L 355 210 L 385 215 L 423 175 L 423 282 L 270 282 Z" fill="url(#chartAreaGrad)"/>
+
+    <!-- Trend Line (Ascending / Bullish) -->
+    <path d="M 268 253 L 300 235 L 325 243 L 355 210 L 385 215 L 423 175" fill="none" stroke="url(#lineGrad)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" filter="url(#glow)"/>
+
+    <!-- Bullish Arrow Head on Line -->
+    <path d="M 411 175 L 423 175 L 423 187" fill="none" stroke="#4ADE80" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Data Nodes / Glowing Points -->
+    <circle cx="300" cy="235" r="3.5" fill="#FFFFFF"/>
+    <circle cx="355" cy="210" r="3.5" fill="#FFFFFF"/>
+    <circle cx="423" cy="175" r="5" fill="#4ADE80" filter="url(#glow)"/>
+
+    <!-- Header Bull Icon Badge on Board -->
+    <rect x="265" y="171" width="30" height="16" rx="4" fill="#1E293B"/>
+    <path d="M 272 179 L 280 173 L 288 179" fill="none" stroke="#38BDF8" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+
+    <!-- Bullish Growth Pill (Pure graphic symbol arrow) -->
+    <rect x="395" y="171" width="42" height="16" rx="8" fill="#22C55E"/>
+    <path d="M 411 182 L 421 176 M 421 176 L 415 176 M 421 176 L 421 182" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+
+  <!-- Front Arm / Hand holding the chart frame firmly -->
+  <g transform="rotate(-6 350 270)">
+    <path d="M 215 285 Q 240 300 275 288" fill="none" stroke="#475569" stroke-width="22" stroke-linecap="round"/>
+    <!-- Claws/Hand fingers clutching board -->
+    <circle cx="272" cy="286" r="11" fill="#CBD5E1"/>
+    <circle cx="283" cy="288" r="10" fill="#94A3B8"/>
+  </g>
+
+  <!-- Sparkles / Financial Success Stars floating around -->
+  <!-- Sparkle 1 (Top right of chart) -->
+  <g transform="translate(450, 135)">
+    <path d="M 0 -12 Q 0 0 12 0 Q 0 0 0 12 Q 0 0 -12 0 Q 0 0 0 -12 Z" fill="#F59E0B" filter="url(#glow)"/>
+  </g>
+  <!-- Sparkle 2 (Above head) -->
+  <g transform="translate(125, 85) scale(0.7)">
+    <path d="M 0 -12 Q 0 0 12 0 Q 0 0 0 12 Q 0 0 -12 0 Q 0 0 0 -12 Z" fill="#38BDF8" filter="url(#glow)"/>
+  </g>
+  <!-- Sparkle 3 (Near board bottom) -->
+  <g transform="translate(470, 285) scale(0.6)">
+    <path d="M 0 -12 Q 0 0 12 0 Q 0 0 0 12 Q 0 0 -12 0 Q 0 0 0 -12 Z" fill="#22C55E" filter="url(#glow)"/>
+  </g>
+
+  <!-- Mini Floating Dollar Sign -->
+  <g transform="translate(95, 160) rotate(-12)">
+    <circle cx="0" cy="0" r="14" fill="#22C55E" opacity="0.9" filter="url(#dropShadow)"/>
+    <path d="M 0 -7 L 0 7 M -4 -4 C -4 -6 4 -6 4 -2 C 4 2 -4 2 -4 5 C -4 8 4 8 4 5" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" fill="none"/>
+  </g>
+</svg>
