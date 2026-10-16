@@ -81,13 +81,15 @@ python3 termux_alerts.py
 
 Features available in Termux Terminal mode:
 - Interactive terminal menu to view, add, toggle, and remove alert rules.
+- Selection of alert notification mode on launch and via main menu settings: **Sound Only**, **Vibration Only**, or **Both Sound & Vibration**.
 - Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
 - Zero external Python package requirements (pure Python 3 standard library).
 - Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, and terminal acoustic bells `\a`).
-- Android system notifications with sound and vibration via `termux-notification`.
+- Haptic vibration alerts using Termux API (`termux-vibrate`).
+- Android system notifications with sound and vibration patterns via `termux-notification`.
   - **Permissions Note**: Ensure system notification permissions are manually granted to **Termux** in your Android settings.
 - Background lock screen execution via automatic CPU WakeLock (`termux-wake-lock`).
-- Atomic JSON rule persistence (`termux_alerts_config.json`).
+- Atomic JSON rule and mode persistence (`termux_alerts_config.json`).
 
 ---
 

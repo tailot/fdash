@@ -41,6 +41,10 @@ from datetime import datetime
 CONFIG_PATH = os.environ.get("TERMUX_ALERTS_FILE", "termux_alerts_config.json")
 POLL_INTERVAL_SECONDS = int(os.environ.get("TERMUX_ALERT_POLL_SECONDS", "60"))
 CONDITIONS = (">=", "<=")
+ALERT_MODES = ("sound", "vibration", "both")
+DEFAULT_ALERT_MODE = os.environ.get("TERMUX_ALERT_MODE", "both").lower()
+if DEFAULT_ALERT_MODE not in ALERT_MODES:
+    DEFAULT_ALERT_MODE = "both"
 
 
 # ----------------------------------------------------------------------------- Termux Environment Enforcement
@@ -93,10 +97,22 @@ def release_wake_lock() -> bool:
     return False
 
 
-# ----------------------------------------------------------------------------- Termux System Notification
-def send_termux_notification(title: str, content: str) -> bool:
+# ----------------------------------------------------------------------------- Termux System Notification & Vibration
+def vibrate_termux(duration_ms: int = 1000) -> bool:
+    """Vibrates device using Termux API (`termux-vibrate`)."""
+    cmd = shutil.which("termux-vibrate") or "termux-vibrate"
+    vibrate_args = [cmd, "-d", str(duration_ms), "-f"]
+    try:
+        subprocess.run(vibrate_args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError, Exception):
+        return False
+
+
+def send_termux_notification(title: str, content: str, vibrate_pattern: str = None) -> bool:
     """
     Sends an Android system notification via Termux API (`termux-notification`).
+    Optionally accepts a vibration pattern (e.g. "1000,500,1000").
     """
     cmd = shutil.which("termux-notification") or "termux-notification"
     notif_args = [
@@ -105,6 +121,8 @@ def send_termux_notification(title: str, content: str) -> bool:
         "--content", content,
         "--id", "123"
     ]
+    if vibrate_pattern:
+        notif_args.extend(["--vibrate", vibrate_pattern])
     try:
         subprocess.run(notif_args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
@@ -139,32 +157,49 @@ def normalize_rules(rules_list: list) -> list:
     return normalized
 
 
-def load_rules(path: str = None) -> list:
-    """Loads alert rules from JSON file."""
+def load_config(path: str = None) -> tuple:
+    """Loads rules and alert_mode setting from JSON file. Returns (rules, alert_mode)."""
     path = path or CONFIG_PATH
     try:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
-        return normalize_rules(data.get("rules", []))
+        rules = normalize_rules(data.get("rules", []))
+        mode = str(data.get("alert_mode", DEFAULT_ALERT_MODE)).lower()
+        if mode not in ALERT_MODES:
+            mode = DEFAULT_ALERT_MODE
+        return rules, mode
     except (OSError, ValueError):
-        return []
+        return [], DEFAULT_ALERT_MODE
 
 
-def save_rules(rules: list, path: str = None) -> bool:
-    """Saves alert rules to JSON file atomically."""
+def save_config(rules: list, alert_mode: str = "both", path: str = None) -> bool:
+    """Saves rules and alert_mode setting to JSON file atomically."""
     path = path or CONFIG_PATH
     clean = normalize_rules(rules)
+    mode = str(alert_mode).lower() if str(alert_mode).lower() in ALERT_MODES else DEFAULT_ALERT_MODE
     try:
         folder = os.path.dirname(os.path.abspath(path))
         if folder:
             os.makedirs(folder, exist_ok=True)
         fd, tmp = tempfile.mkstemp(dir=folder or ".", prefix=".tmp_rules_", suffix=".json")
         with os.fdopen(fd, "w", encoding="utf-8") as f:
-            json.dump({"rules": clean}, f, indent=2)
+            json.dump({"alert_mode": mode, "rules": clean}, f, indent=2)
         os.replace(tmp, path)
         return True
     except OSError:
         return False
+
+
+def load_rules(path: str = None) -> list:
+    """Loads alert rules from JSON file."""
+    rules, _ = load_config(path)
+    return rules
+
+
+def save_rules(rules: list, path: str = None) -> bool:
+    """Saves alert rules to JSON file atomically."""
+    _, mode = load_config(path)
+    return save_config(rules, mode, path)
 
 
 def rule_key(rule: dict) -> str:
@@ -327,6 +362,30 @@ def play_termux_sound() -> dict:
     return results
 
 
+def trigger_alert_notification(mode: str, title: str, content: str) -> dict:
+    """
+    Triggers alert based on the configured mode:
+    - mode='sound': plays sound + sends system notification
+    - mode='vibration': vibrates device + sends system notification
+    - mode='both': plays sound + vibrates device + sends system notification
+    """
+    results = {"sound": False, "vibration": False, "notification": False}
+    mode = (mode or "both").lower()
+    if mode not in ALERT_MODES:
+        mode = "both"
+
+    if mode in ("sound", "both"):
+        sound_res = play_termux_sound()
+        results["sound"] = any(sound_res.values())
+
+    if mode in ("vibration", "both"):
+        results["vibration"] = vibrate_termux(1000)
+
+    vibrate_pattern = "1000,500,1000" if mode in ("vibration", "both") else None
+    results["notification"] = send_termux_notification(title, content, vibrate_pattern=vibrate_pattern)
+    return results
+
+
 # ----------------------------------------------------------------------------- Terminal UI Commands
 def display_rules_and_prices(rules: list, prices: dict = None):
     """Prints current alert rules and live prices to the terminal."""
@@ -350,6 +409,31 @@ def display_rules_and_prices(rules: list, prices: dict = None):
         active_str = "ACTIVE" if r.get("active", True) else "DISABLED"
         print(f"{idx:<3} {sym:<10} {cond_str:<12} {target_str:<12} {p_str:<15} {active_str:<8}")
     print("=" * 60 + "\n")
+
+
+def prompt_select_alert_mode(current_mode: str) -> str:
+    """Prompt user to set or change alert mode (sound, vibration, or both)."""
+    print("\n--- SELECT ALERT NOTIFICATION MODE ---")
+    print(f" Current Mode: {current_mode.upper()}")
+    print("  1) Sound Only (Suono)")
+    print("  2) Vibration Only (Vibrazione)")
+    print("  3) Both Sound & Vibration (Suono e Vibrazione)")
+    try:
+        choice = input("Select option [1-3] (Press Enter to keep current): ").strip()
+        if choice == "1":
+            return "sound"
+        elif choice == "2":
+            return "vibration"
+        elif choice == "3":
+            return "both"
+        elif choice == "":
+            return current_mode
+        else:
+            print("Invalid choice. Keeping current mode.")
+            return current_mode
+    except (KeyboardInterrupt, EOFError):
+        print("\nOperation cancelled. Keeping current mode.")
+        return current_mode
 
 
 def prompt_add_rule(rules: list) -> list:
@@ -437,10 +521,11 @@ def prompt_remove_rule(rules: list) -> list:
     return rules
 
 
-def start_live_monitoring(rules: list):
+def start_live_monitoring(rules: list, alert_mode: str = "both"):
     """Runs continuous real-time market polling loop for active alert rules."""
     print("\n" + "=" * 60)
-    print("      STARTING REAL-TIME ALERT MONITORING (TERMUX)")
+    print(f"      STARTING REAL-TIME ALERT MONITORING (TERMUX)")
+    print(f"      Alert Mode: {alert_mode.upper()}")
     print("      Press Ctrl+C to stop and return to main menu")
     print("=" * 60 + "\n")
 
@@ -481,8 +566,7 @@ def start_live_monitoring(rules: list):
                     print("\n" + "!" * 60)
                     print(f" *** TRIGGER FIRED: {msg} ***")
                     print("!" * 60 + "\n")
-                    play_termux_sound()
-                    send_termux_notification(f"Price Alert: {ev['symbol']}", msg)
+                    trigger_alert_notification(alert_mode, f"Price Alert: {ev['symbol']}", msg)
             else:
                 print(" No active rules configured.")
 
@@ -501,22 +585,33 @@ def run_main_menu():
     """Main interactive terminal loop for Termux."""
     enforce_termux_environment()
 
+    rules, alert_mode = load_config()
+
+    print("\n" + "=" * 50)
+    print("     TERMUX PRICE ALERT MONITOR (TERMINAL MODE)")
+    print("=" * 50)
+
+    # Launch option prompt to select alert mode (sound / vibration / both)
+    alert_mode = prompt_select_alert_mode(alert_mode)
+    save_config(rules, alert_mode)
+
     while True:
-        rules = load_rules()
+        rules, alert_mode = load_config()
         print("\n" + "=" * 50)
-        print("     TERMUX PRICE ALERT MONITOR (TERMINAL MODE)")
+        print(f"     TERMUX PRICE ALERT MONITOR - MODE: {alert_mode.upper()}")
         print("=" * 50)
         print(" 1) View Rules & Prices")
         print(" 2) Add New Alert Rule")
         print(" 3) Enable / Disable Rule")
         print(" 4) Remove Rule")
         print(" 5) Start Continuous Monitoring")
-        print(" 6) Test Termux Audio Sound")
+        print(" 6) Test Alert Notification (Sound / Vibration)")
+        print(" 7) Change Alert Mode (Sound / Vibration / Both)")
         print(" 0) Exit")
         print("=" * 50)
 
         try:
-            choice = input("Select an option [0-6]: ").strip()
+            choice = input("Select an option [0-7]: ").strip()
         except (KeyboardInterrupt, EOFError):
             print("\nExiting Termux Price Alert Monitor. Goodbye!")
             break
@@ -532,12 +627,15 @@ def run_main_menu():
         elif choice == "4":
             prompt_remove_rule(rules)
         elif choice == "5":
-            start_live_monitoring(rules)
+            start_live_monitoring(rules, alert_mode)
         elif choice == "6":
-            print("\nExecuting Termux sound & notification test...")
-            res = play_termux_sound()
-            notif_sent = send_termux_notification("Termux Alert Test", "Sound & Notification test in progress")
-            print(f"Sound test result: {res}, Notification sent: {notif_sent}\n")
+            print(f"\nExecuting alert test for mode [{alert_mode.upper()}]...")
+            res = trigger_alert_notification(alert_mode, "Termux Alert Test", f"Alert test in progress (Mode: {alert_mode.upper()})")
+            print(f"Test results: {res}\n")
+        elif choice == "7":
+            alert_mode = prompt_select_alert_mode(alert_mode)
+            save_config(rules, alert_mode)
+            print(f"Alert mode updated to: {alert_mode.upper()}")
         elif choice == "0":
             print("\nExiting Termux Price Alert Monitor. Goodbye!")
             break
