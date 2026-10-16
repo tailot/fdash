@@ -81,7 +81,10 @@ python3 termux_alerts.py
 
 Features available in Termux Terminal mode:
 - Interactive terminal menu to view, add, toggle, and remove alert rules.
-- Selection of alert notification mode on launch and via main menu settings: **Sound Only**, **Vibration Only**, or **Both Sound & Vibration**.
+- Selection of alert notification mode (**Sound Only**, **Vibration Only**, or **Both Sound & Vibration**):
+  - **At Startup**: Prompted interactively upon launching `./termux_run` or `python3 termux_alerts.py`.
+  - **Main Menu**: Option `7) Change Alert Mode` allows updating the preference at any time.
+  - **Environment Variable**: Set `TERMUX_ALERT_MODE=vibration` (or `sound`/`both`) prior to execution.
 - Real-time tracking for bullish (`>=`) and bearish (`<=`) price targets.
 - Zero external Python package requirements (pure Python 3 standard library).
 - Audio sound notifications leveraging Termux tools (generated PCM WAV tone sound playback via media players, and terminal acoustic bells `\a`).
