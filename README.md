@@ -20,12 +20,15 @@ Because the permissive ISC License of `fdash` is not compatible with the non-com
 
 ### How to intentionally enable TimesFM-3:
 1. **Local Python Environment:** Intentionally install optional packages via `pip install -r requirements-timesfm.txt`.
-2. **Docker:** Build with `--build-arg INSTALL_TIMESFM=true`:
+2. **Docker Compose:** Pass `INSTALL_TIMESFM=true` via environment variable or `.env` file:
+   ```bash
+   INSTALL_TIMESFM=true docker compose up --build
+   ```
+3. **Docker CLI:** Build with `--build-arg INSTALL_TIMESFM=true`:
    ```bash
    docker build --build-arg INSTALL_TIMESFM=true -t financial-dashboard .
    ```
-   Or uncomment `args: [INSTALL_TIMESFM: "true"]` in `docker-compose.yml`.
-3. **Streamlit UI:** Check the **"Use TimesFM-3"** checkbox in the sidebar menu (unchecked by default).
+4. **Streamlit UI:** Check the **"Use TimesFM-3"** checkbox in the sidebar menu (unchecked by default).
 
 Without TimesFM-3 installed or enabled, `fdash` operates fully using the **Naive (0%)** baseline forecast model.
 
@@ -131,7 +134,7 @@ You can run the application in an isolated and automated environment using **Doc
    ```bash
    docker compose up --build
    ```
-   *(To intentionally enable TimesFM-3, uncomment `args: [INSTALL_TIMESFM: "true"]` in `docker-compose.yml` before building).*
+   *(To intentionally enable TimesFM-3, run: `INSTALL_TIMESFM=true docker compose up --build` or set `INSTALL_TIMESFM=true` in a `.env` file).*
 2. Open your browser at: `http://localhost:8501`
 3. To stop the container:
    ```bash
