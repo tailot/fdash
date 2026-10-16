@@ -20,7 +20,7 @@ Because the permissive ISC License of `fdash` is not compatible with the non-com
 
 ### How to intentionally enable TimesFM-3:
 1. **Local Python Environment:** Intentionally install optional packages via `pip install -r requirements-timesfm.txt`.
-2. **Docker Compose:** Pass `INSTALL_TIMESFM=true` via environment variable or `.env` file:
+2. **Docker Compose:** Pass `INSTALL_TIMESFM=true` via environment variable (on Windows PowerShell: `$env:INSTALL_TIMESFM="true"; docker compose up --build`) or `.env` file:
    ```bash
    INSTALL_TIMESFM=true docker compose up --build
    ```
@@ -134,7 +134,7 @@ You can run the application in an isolated and automated environment using **Doc
    ```bash
    docker compose up --build
    ```
-   *(To intentionally enable TimesFM-3, run: `INSTALL_TIMESFM=true docker compose up --build` or set `INSTALL_TIMESFM=true` in a `.env` file).*
+   *(To intentionally enable TimesFM-3, run: `INSTALL_TIMESFM=true docker compose up --build` — on Windows PowerShell: `$env:INSTALL_TIMESFM="true"; docker compose up --build` — or set `INSTALL_TIMESFM=true` in a `.env` file).*
 2. Open your browser at: `http://localhost:8501`
 3. To stop the container:
    ```bash
@@ -198,7 +198,7 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 **Alerts section**
 - Configure any number of rules in the table: *Symbol*, *Condition* (`>=` alarm when the price rises to/above the target, `<=` when it falls to/below), *Target price*, *Active*. Rules are saved to `alerts_config.json`.
 - Choose **🔊 Sound alarm** and/or **💬 Notification** (in-app toast + browser notification: click *Enable browser notifications* once).
-- **▶ Start monitoring**: the app makes **one batched call per interval** to the finance service (Yahoo Finance, 1-minute bars) for all the active symbols. The interval is `POLL_INTERVAL_SECONDS` in `alerts_engine.py` (default 60, or env var `FDASH_ALERT_POLL_SECONDS`).
+- **▶ Start monitoring**: the app makes **one batched call per interval** to the finance service (Yahoo Finance, 1-minute bars) for all the active symbols. The interval is `POLL_INTERVAL_SECONDS` in `alerts_engine.py` (default 60, or env var `FDASH_ALERT_POLL_SECONDS`, e.g. on Windows PowerShell: `$env:FDASH_ALERT_POLL_SECONDS="60"`).
 - An alarm fires once when the condition becomes true and re-arms when it becomes false again (no repeated alarm every minute). Fired alarms are listed in the log.
 - Without the worker service (fallback) keep the browser tab open: monitoring runs while the session is alive. Click *Start monitoring* at least once so the browser allows the alarm sound. When the worker is running the dashboard just mirrors its state (no duplicate calls to the finance service) and only plays the in-app sound/toast.
 
@@ -207,7 +207,7 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 - In the Alerts section click *🔔 Enable on this device* once per device. The service worker `static/sw.js` shows the system notification even with the tab closed (served via `.streamlit/config.toml`: `enableStaticServing = true`).
 - Run it with `docker compose up -d` (the `alerts-worker` service shares `/data` with the dashboard) or manually: `python alerts_worker.py` (`--once` for a single cycle, `--test-push` to send a test notification).
 - Web Push needs HTTPS (or `localhost`). On iOS the app must be added to the Home Screen first.
-- Env vars: `FDASH_DATA_DIR`, `FDASH_ALERT_POLL_SECONDS`, `FDASH_VAPID_CONTACT`.
+- Env vars (on Windows PowerShell use e.g. `$env:FDASH_DATA_DIR="C:\path\to\data"`): `FDASH_DATA_DIR`, `FDASH_ALERT_POLL_SECONDS`, `FDASH_VAPID_CONTACT`.
 
 ### 📊 Universe Configuration
 - **Stocks Universe Selection:** Choose between two modes:
