@@ -61,14 +61,6 @@ else
     echo "[!] Warning: requirements.txt not found!"
 fi
 
-# Check for optional --timesfm flag
-if [[ "$*" == *"--timesfm"* ]]; then
-    if [ -f "requirements-timesfm.txt" ]; then
-        echo "[*] Installing optional TimesFM dependencies..."
-        pip install -r requirements-timesfm.txt
-    fi
-fi
-
 PORT=${PORT:-8501}
 
 echo ""

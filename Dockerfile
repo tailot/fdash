@@ -2,22 +2,25 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
+# Optional build argument to install TimesFM-3 (defaults to false for license compliance)
+ARG INSTALL_TIMESFM=false
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Copia entrambi i file: requirements-timesfm.txt include requirements.txt (-r)
 COPY requirements.txt requirements-timesfm.txt ./
 
-# 1) torch versione CPU (molto più leggero della versione CUDA)
-# 2) dipendenze dell'app + TimesFM-3
-RUN pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
- && pip install --no-cache-dir -r requirements-timesfm.txt
+# Install standard dependencies by default (without TimesFM-3).
+# To intentionally install TimesFM-3, build with: --build-arg INSTALL_TIMESFM=true
+RUN pip install --no-cache-dir torch torchvision --index-url https://download.pytorch.org/whl/cpu \
+ && pip install --no-cache-dir -r requirements.txt \
+ && if [ "$INSTALL_TIMESFM" = "true" ]; then pip install --no-cache-dir -r requirements-timesfm.txt; fi
 
 COPY . .
 
-# I pesi del modello (Hugging Face) vengono scaricati qui al primo avvio
+# Hugging Face model weights cache directory
 ENV HF_HOME=/app/.cache/huggingface
 
 EXPOSE 8501

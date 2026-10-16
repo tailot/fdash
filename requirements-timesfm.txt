@@ -1,4 +1,4 @@
-# Opzionale: abilita la vera previsione TimesFM-3. Richiede torch; consigliata una GPU.
-# Licenza dei pesi: TimesFM Non-Commercial License v1.0 (solo uso personale/di ricerca).
+# Optional: enables real TimesFM-3 forecasting. Requires PyTorch; GPU recommended.
+# Model weight license: TimesFM Non-Commercial License v1.0 (personal/research use only).
 -r requirements.txt
 timesfm[torch]>=3.0
