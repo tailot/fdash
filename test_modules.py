@@ -525,9 +525,13 @@ def test_termux_alerts_rules_and_persistence(tmp_path):
     assert cleaned[1] == {"symbol": "AAPL", "condition": "<=", "target": 150.0, "active": False}
 
     cfg = str(tmp_path / "termux_alerts.json")
+    assert ta.save_config(raw_rules, "vibration", cfg)
+    loaded_rules, loaded_mode = ta.load_config(cfg)
+    assert loaded_rules == cleaned
+    assert loaded_mode == "vibration"
+
     assert ta.save_rules(raw_rules, cfg)
-    loaded = ta.load_rules(cfg)
-    assert loaded == cleaned
+    assert ta.load_rules(cfg) == cleaned
 
     # Rule key & trigger logic
     rule_bull = {"symbol": "MSFT", "condition": ">=", "target": 300.0, "active": True}
@@ -618,9 +622,9 @@ def test_termux_alerts_send_notification(monkeypatch):
         calls.append(cmd)
 
     monkeypatch.setattr(ta.subprocess, "run", mock_run)
-    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd == "termux-notification" else None)
+    monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd in ("termux-notification", "termux-vibrate") else None)
 
-    assert ta.send_termux_notification("Title Test", "Content Test")
+    assert ta.send_termux_notification("Title Test", "Content Test", vibrate_pattern="1000,500,1000")
     assert len(calls) == 1
     assert calls[0][0] == "/usr/bin/termux-notification"
     assert "--title" in calls[0]
@@ -629,6 +633,44 @@ def test_termux_alerts_send_notification(monkeypatch):
     assert "Content Test" in calls[0]
     assert "--id" in calls[0]
     assert "123" in calls[0]
+    assert "--vibrate" in calls[0]
+    assert "1000,500,1000" in calls[0]
+
+    assert ta.vibrate_termux(1000)
+    assert len(calls) == 2
+    assert calls[1][0] == "/usr/bin/termux-vibrate"
+
+
+def test_termux_alerts_trigger_alert_notification(monkeypatch):
+    monkeypatch.setattr(ta, "play_termux_sound", lambda: {"media": True, "bell": True})
+    monkeypatch.setattr(ta, "vibrate_termux", lambda duration=1000: True)
+    monkeypatch.setattr(ta, "send_termux_notification", lambda title, content, vibrate_pattern=None: True)
+
+    res_sound = ta.trigger_alert_notification("sound", "Title", "Msg")
+    assert res_sound["sound"] is True
+    assert res_sound["vibration"] is False
+    assert res_sound["notification"] is True
+
+    res_vib = ta.trigger_alert_notification("vibration", "Title", "Msg")
+    assert res_vib["sound"] is False
+    assert res_vib["vibration"] is True
+    assert res_vib["notification"] is True
+
+    res_both = ta.trigger_alert_notification("both", "Title", "Msg")
+    assert res_both["sound"] is True
+    assert res_both["vibration"] is True
+    assert res_both["notification"] is True
+
+
+def test_termux_alerts_prompt_select_alert_mode(monkeypatch):
+    inputs = iter(["1", "2", "3", "", "invalid"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+
+    assert ta.prompt_select_alert_mode("both") == "sound"
+    assert ta.prompt_select_alert_mode("both") == "vibration"
+    assert ta.prompt_select_alert_mode("both") == "both"
+    assert ta.prompt_select_alert_mode("sound") == "sound"
+    assert ta.prompt_select_alert_mode("sound") == "sound"
 
 
 def test_termux_alerts_wake_lock(monkeypatch):
