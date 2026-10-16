@@ -586,7 +586,7 @@ def render_analysis_section():
         horizon = st.sidebar.slider(t("horizon_slider", lang_code), 1, 20, HORIZON)
         soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
                                                 help=t("trend_threshold_help", lang_code))
-        usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=True)
+        usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=False)
 
         st.sidebar.subheader(t("volume_header", lang_code))
         metodo = st.sidebar.selectbox(t("buy_sell_method", lang_code), ["clv", "candela", "tick"], index=0)

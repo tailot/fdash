@@ -10,6 +10,27 @@ The application **natively** calculates quantitative and volumetric metrics (inc
 
 ---
 
+## ⚖️ License Notice & Optional TimesFM-3 Usage
+
+**Important License Notice:**
+- **Repository (`fdash`) License:** The codebase of `fdash` is licensed under the permissive **ISC License** (Copyright (c) 2026 Vincenzo Tilotta), allowing free commercial and non-commercial reuse, modification, and distribution.
+- **TimesFM-3 Model License:** Google's **TimesFM** model and pre-trained weights are governed by the **TimesFM Non-Commercial License v1.0** (restricting usage to personal and non-commercial research purposes).
+
+Because the permissive ISC License of `fdash` is not compatible with the non-commercial restrictions of TimesFM-3 model weights, **TimesFM-3 is strictly OPTIONAL and is NOT installed or enabled by default**. When launching launch commands or building containers, users must intentionally opt-in to install and use TimesFM-3.
+
+### How to intentionally enable TimesFM-3:
+1. **Local Python Environment:** Intentionally install optional packages via `pip install -r requirements-timesfm.txt`.
+2. **Docker:** Build with `--build-arg INSTALL_TIMESFM=true`:
+   ```bash
+   docker build --build-arg INSTALL_TIMESFM=true -t financial-dashboard .
+   ```
+   Or uncomment `args: [INSTALL_TIMESFM: "true"]` in `docker-compose.yml`.
+3. **Streamlit UI:** Check the **"Use TimesFM-3"** checkbox in the sidebar menu (unchecked by default).
+
+Without TimesFM-3 installed or enabled, `fdash` operates fully using the **Naive (0%)** baseline forecast model.
+
+---
+
 ## 🌟 Key Features
 
 The native calculation includes:
@@ -46,8 +67,8 @@ The native calculation includes:
 Clone or download the repository, then install the required packages:
 
 ```bash
-pip install -r requirements.txt            # without TimesFM-3 (Naive baseline)
-pip install -r requirements-timesfm.txt    # optional: real TimesFM-3
+pip install -r requirements.txt            # Default standard installation (without TimesFM-3)
+pip install -r requirements-timesfm.txt    # Optional: intentionally opt-in to real TimesFM-3 model
 ```
 
 ### 3. Running the Application
@@ -102,14 +123,15 @@ Features available in Termux Terminal mode:
 
 ## 🐳 Running with Docker
 
-You can run the application in an isolated and automated environment using **Docker** or **Docker Compose**.
+You can run the application in an isolated and automated environment using **Docker** or **Docker Compose**. By default, containers are built without `timesfm` to preserve ISC license compatibility.
 
 ### Option A: With Docker Compose (Recommended)
 
-1. Start the container:
+1. Start the container (default mode without TimesFM-3):
    ```bash
    docker compose up --build
    ```
+   *(To intentionally enable TimesFM-3, uncomment `args: [INSTALL_TIMESFM: "true"]` in `docker-compose.yml` before building).*
 2. Open your browser at: `http://localhost:8501`
 3. To stop the container:
    ```bash
@@ -118,10 +140,11 @@ You can run the application in an isolated and automated environment using **Doc
 
 ### Option B: With Docker CLI
 
-1. Build the Docker image:
+1. Build the default Docker image (without TimesFM-3):
    ```bash
    docker build -t financial-dashboard .
    ```
+   *(To intentionally include TimesFM-3, build with: `docker build --build-arg INSTALL_TIMESFM=true -t financial-dashboard .`)*
 2. Run the container:
    ```bash
    docker run -d -p 8501:8501 --name financial_dashboard financial-dashboard
@@ -130,9 +153,9 @@ You can run the application in an isolated and automated environment using **Doc
 
 ---
 
-## 📱 Running on Termux (Android)
+## 📱 Running Streamlit Dashboard on Termux (Android)
 
-You can run the dashboard natively on Android devices using **Termux**.
+You can run the full dashboard natively on Android devices using **Termux**.
 
 ### 1. Prerequisites on Android
 1. Install **Termux** (recommended from [F-Droid](https://f-droid.org/packages/com.termux/)).
@@ -191,7 +214,7 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 ### 📈 Forecast Settings (TimesFM-3)
 - **Horizon (trading days):** Select the forecast horizon between 1 and 20 trading days (default: 5).
 - **Trend Threshold (x cumulated sigma):** Set the multiplier (range: 0.0 to 1.0, default: 0.10) for classifying trends. A BUY or SELL trend signal is triggered when the expected return magnitude exceeds `threshold × sigma`.
-- **Use TimesFM-3 Checkbox:** Enable/disable TimesFM-3 probabilistic neural network inference. When unchecked or unavailable, the system defaults to the Naive (0%) baseline model.
+- **Use TimesFM-3 Checkbox:** Enable/disable TimesFM-3 probabilistic neural network inference (unchecked by default). When unchecked or unavailable, the system defaults to the Naive (0%) baseline model.
 
 ### 🔍 Volume Microstructure Settings (1-Minute intraday data)
 - **Buy/Sell Estimation Method:** Select the algorithm used to split volume into buy vs. sell flows:

@@ -1,6 +1,10 @@
 services:
   financial-dashboard:
-    build: .
+    build:
+      context: .
+      # To intentionally install optional TimesFM-3, uncomment args below:
+      # args:
+      #   INSTALL_TIMESFM: "true"
     container_name: financial_master_dashboard
     ports:
       - "8501:8501"
@@ -15,7 +19,11 @@ services:
   # Alerts worker: polls the finance service once per interval and sends Web Push notifications,
   # even when no browser tab is open. Shares rules / subscriptions / VAPID keys with the dashboard via /data.
   alerts-worker:
-    build: .
+    build:
+      context: .
+      # To intentionally install optional TimesFM-3, uncomment args below:
+      # args:
+      #   INSTALL_TIMESFM: "true"
     container_name: fdash_alerts_worker
     entrypoint: ["python", "alerts_worker.py"]
     volumes:
