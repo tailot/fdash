@@ -142,21 +142,6 @@ chmod +x termuxrun.sh
 ./termuxrun.sh
 ```
 
-The script automatically detects the Termux environment, installs required system packages, sets up an isolated Python virtual environment, installs dependencies, and launches the Streamlit dashboard.
-
-#### Options:
-- **Enable TimesFM support:**
-  ```bash
-  ./termuxrun.sh --timesfm
-  ```
-- **Custom Port:**
-  ```bash
-  PORT=8502 ./termuxrun.sh
-  ```
-
-Once launched, open your browser on Android and navigate to:
-`http://localhost:8501`
-
 ---
 
 ## ⚙️ Application Usage & Sidebar Menu Customizations
