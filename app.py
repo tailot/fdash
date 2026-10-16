@@ -587,6 +587,8 @@ def render_analysis_section():
         soglia_trend = st.sidebar.number_input(t("trend_threshold_label", lang_code), 0.0, 1.0, SOGLIA_TREND, 0.05,
                                                 help=t("trend_threshold_help", lang_code))
         usa_tfm = st.sidebar.checkbox(t("use_tfm_checkbox", lang_code), value=False)
+        if usa_tfm:
+            st.sidebar.warning(t("tfm_license_warning", lang_code))
 
         st.sidebar.subheader(t("volume_header", lang_code))
         metodo = st.sidebar.selectbox(t("buy_sell_method", lang_code), ["clv", "candela", "tick"], index=0)
