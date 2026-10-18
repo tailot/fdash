@@ -17,6 +17,9 @@ Database Persistence Engine for Financial Analysis Dashboard.
 
 Uses SQLite to persist generated analysis runs, including quantitative forecasts,
 volume microstructure, parameters, and metadata.
+Location: DASHBOARD_DB_PATH, defaulting to <FDASH_DATA_DIR>/analysis_history.db, so the
+archive lands on the shared /data volume when running under Docker Compose.
+
 """
 
 import sqlite3
@@ -26,7 +29,15 @@ import datetime
 import numpy as np
 import pandas as pd
 
-DB_FILE = os.environ.get("DASHBOARD_DB_PATH", "analysis_history.db")
+DATA_DIR = os.environ.get("FDASH_DATA_DIR", ".")
+DB_FILE = os.environ.get("DASHBOARD_DB_PATH") or os.path.join(DATA_DIR, "analysis_history.db")
+
+
+def _ensure_parent_dir(db_file: str = DB_FILE):
+    """Creates the folder containing the database file when it does not exist yet."""
+    parent = os.path.dirname(os.path.abspath(db_file))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
 
 
 def _json_default(obj):
@@ -42,6 +53,7 @@ def _json_default(obj):
 
 
 def get_connection(db_file: str = DB_FILE) -> sqlite3.Connection:
+    _ensure_parent_dir(db_file)
     conn = sqlite3.connect(db_file)
     conn.row_factory = sqlite3.Row
     return conn
@@ -50,6 +62,11 @@ def get_connection(db_file: str = DB_FILE) -> sqlite3.Connection:
 def init_db(db_file: str = DB_FILE):
     """Initializes SQLite database and creates tables if they don't exist."""
     with get_connection(db_file) as conn:
+        try:
+            conn.execute("PRAGMA journal_mode=WAL")  # the dashboard and the alerts-worker share this file
+        except sqlite3.Error:
+            pass  # keep the default rollback journal on filesystems without WAL support
+
         cursor = conn.cursor()
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS analysis_runs (
