@@ -141,6 +141,8 @@ You can run the application in an isolated and automated environment using **Doc
    docker compose down
    ```
 
+4. **Data persistence:** the named volume `fdash_data` is mounted at `/data` and stores the SQLite archive (`analysis_history.db`, via `DASHBOARD_DB_PATH`) together with `alerts_config.json`, `alerts_push_subs.json`, `alerts_vapid.json` and `alerts_state.json`, so the history and the alert rules/subscriptions survive `docker compose down` and image rebuilds. Use `docker compose down -v` only if you intentionally want to erase them.
+
 ### Option B: With Docker CLI
 
 1. Build the default Docker image (without TimesFM-3):
@@ -207,7 +209,7 @@ At the top of the left sidebar a **Section** selector switches between **📊 An
 - In the Alerts section click *🔔 Enable on this device* once per device. The service worker `static/sw.js` shows the system notification even with the tab closed (served via `.streamlit/config.toml`: `enableStaticServing = true`).
 - Run it with `docker compose up -d` (the `alerts-worker` service shares `/data` with the dashboard) or manually: `python alerts_worker.py` (`--once` for a single cycle, `--test-push` to send a test notification).
 - Web Push needs HTTPS (or `localhost`). On iOS the app must be added to the Home Screen first.
-- Env vars (on Windows PowerShell use e.g. `$env:FDASH_DATA_DIR="C:\path\to\data"`): `FDASH_DATA_DIR`, `FDASH_ALERT_POLL_SECONDS`, `FDASH_VAPID_CONTACT`.
+- Env vars (on Windows PowerShell use e.g. `$env:FDASH_DATA_DIR="C:\path\to\data"`): `FDASH_DATA_DIR`, `DASHBOARD_DB_PATH`, `FDASH_ALERT_POLL_SECONDS`, `FDASH_VAPID_CONTACT`.
 
 ### 📊 Universe Configuration
 - **Stocks Universe Selection:** Choose between two modes:
