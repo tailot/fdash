@@ -21,7 +21,10 @@ import streamlit as st
 from i18n import t
 from quant_engine import ricava_universo
 from discover_engine import (
+    data_quality,
+    enrich_missing_birth_years,
     fetch_stocks_batch,
+    universe_nasdaq_full,
     filter_discovered_stocks,
     format_market_cap,
     format_volume,
@@ -131,49 +134,46 @@ def render_discover_section(lang_code: str = "en"):
     run_discover = st.button(t("discover_button", lang_code), type="primary")
 
     if run_discover:
-        cand = []
-        if universo_type == "manual_list":
-            cand = [t_item.strip().upper() for t_item in tickers_input.split(",") if t_item.strip()]
-        elif universo_type == "sp500":
-            with st.spinner(t("discover_fetching_universe", lang_code)):
-                cand = universe_sp500()
-        elif universo_type == "all_nasdaq":
-            with st.spinner(t("discover_fetching_universe", lang_code)):
-                try:
-                    _, _, cand = ricava_universo(n_tickers=4500, buffer=0, tickers_manuali=None)
-                except Exception as e:
-                    st.error(f"Error retrieving universe: {e}")
-                    cand = []
-        else:  # top_nasdaq
+        vol_kwargs = dict(vol_target=vol_val, vol_unit=vol_unit, vol_op=vol_op,
+                          mc_target=mc_val, mc_unit=mc_unit, mc_op=mc_op)
+        year_kwargs = dict(birth_year_target=int(birth_year), birth_year_op=birth_op)
+
+        if universo_type in ("top_nasdaq", "all_nasdaq"):
+            # Fast path: one call to the Nasdaq screener already gives market cap, volume and IPO year.
             with st.spinner(t("discover_fetching_universe", lang_code)):
                 try:
-                    _, _, cand = ricava_universo(n_tickers=n_top, buffer=0, tickers_manuali=None)
+                    stocks_data = universe_nasdaq_full()
                 except Exception as e:
                     st.error(f"Error retrieving universe: {e}")
-                    cand = []
-
-        if not cand:
-            st.warning(t("discover_no_tickers", lang_code))
-            return
-
-        with st.spinner(t("discover_fetching_info", lang_code).format(len(cand))):
-            stocks_data = fetch_stocks_batch(cand, max_workers=20)
-
-        filtered = filter_discovered_stocks(
-            stocks=stocks_data,
-            vol_target=vol_val,
-            vol_unit=vol_unit,
-            vol_op=vol_op,
-            mc_target=mc_val,
-            mc_unit=mc_unit,
-            mc_op=mc_op,
-            birth_year_target=int(birth_year),
-            birth_year_op=birth_op,
-        )
+                    stocks_data = []
+            if universo_type == "top_nasdaq":
+                stocks_data = [s for s in stocks_data if s["MarketCap"] is not None][:n_top]
+            if not stocks_data:
+                st.warning(t("discover_no_tickers", lang_code))
+                return
+            # Stage 1: volume + market cap (no extra requests). Stage 2: year, filling gaps only for survivors.
+            stage1 = filter_discovered_stocks(stocks=stocks_data, **vol_kwargs)
+            with st.spinner(t("discover_fetching_info", lang_code).format(len(stage1))):
+                enrich_missing_birth_years(stage1)
+            filtered = filter_discovered_stocks(stocks=stage1, **year_kwargs)
+        else:
+            cand = []
+            if universo_type == "manual_list":
+                cand = [t_item.strip().upper() for t_item in tickers_input.split(",") if t_item.strip()]
+            else:  # sp500
+                with st.spinner(t("discover_fetching_universe", lang_code)):
+                    cand = universe_sp500()
+            if not cand:
+                st.warning(t("discover_no_tickers", lang_code))
+                return
+            with st.spinner(t("discover_fetching_info", lang_code).format(len(cand))):
+                stocks_data = fetch_stocks_batch(cand, max_workers=8)
+            filtered = filter_discovered_stocks(stocks=stocks_data, **vol_kwargs, **year_kwargs)
 
         st.session_state["discover_results"] = {
             "scanned": len(stocks_data),
             "filtered": filtered,
+            "quality": data_quality(stocks_data),
         }
 
     # Display saved results if any
@@ -192,6 +192,13 @@ def render_discover_section(lang_code: str = "en"):
         )
 
         st.divider()
+
+        q = res.get("quality") or {}
+        if q and q.get("total"):
+            st.caption(
+                f"Data quality: {q['errors']} fetch errors, {q['no_volume']} without volume, "
+                f"{q['no_mcap']} without market cap (of {q['total']})."
+            )
 
         if not filtered_list:
             st.warning(t("discover_no_match", lang_code))

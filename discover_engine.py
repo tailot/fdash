@@ -18,6 +18,7 @@ Supports S&P 500 (~500 stocks) and large NASDAQ universes (~4,000 stocks).
 """
 
 import io
+import re
 import requests
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
@@ -176,6 +177,93 @@ def fetch_stocks_batch(tickers: list[str], max_workers: int = 20) -> list[dict]:
     with ThreadPoolExecutor(max_workers=workers) as executor:
         results = list(executor.map(fetch_single_stock_info, unique_tickers))
     return results
+
+
+NASDAQ_SCREENER_URL = (
+    "https://api.nasdaq.com/api/screener/stocks?tableonly=true&limit=10000&exchange=NASDAQ&download=true"
+)
+
+
+def _to_num(x):
+    """Converts Nasdaq screener strings like '$1,234,567' or 'N/A' into float (None if not numeric)."""
+    try:
+        v = float(str(x).replace("$", "").replace(",", "").strip())
+        return None if pd.isna(v) else v
+    except (ValueError, TypeError):
+        return None
+
+
+def universe_nasdaq_full() -> list[dict]:
+    """
+    One single HTTP call to the Nasdaq screener. Returns stock dicts (same shape as
+    fetch_single_stock_info) already containing MarketCap, Volume, Price, Sector and
+    BirthYear (IPO year, may be None), sorted by market cap descending.
+    No per-ticker requests -> no rate limit, takes about a second.
+    """
+    r = requests.get(NASDAQ_SCREENER_URL, headers=UA, timeout=30)
+    r.raise_for_status()
+    rows = r.json()["data"]["rows"]
+    out, seen = [], set()
+    for row in rows:
+        sym = str(row.get("symbol", "")).strip().upper().replace("/", "-").replace(".", "-")
+        if not re.fullmatch(r"[A-Z]{1,5}(-[A-Z])?", sym) or sym in seen:
+            continue
+        seen.add(sym)
+        ipo = _to_num(row.get("ipoyear"))
+        out.append({
+            "Ticker": sym,
+            "Name": row.get("name") or sym,
+            "Sector": row.get("sector") or "N/A",
+            "Price": _to_num(row.get("lastsale")),
+            "MarketCap": _to_num(row.get("marketCap")),
+            "Volume": _to_num(row.get("volume")),
+            "BirthYear": int(ipo) if ipo else None,
+            "Error": None,
+        })
+    out.sort(key=lambda d: (d["MarketCap"] is None, -(d["MarketCap"] or 0)))
+    return out
+
+
+def _fetch_birth_year(symbol: str):
+    """Birth year via yfinance, only used for the few stocks that survive volume/market cap filters."""
+    try:
+        t = yf.Ticker(symbol)
+        ms = (t.info or {}).get("firstTradeDateMilliseconds")
+        if ms:
+            return datetime.fromtimestamp(ms / 1000.0).year
+        hist = t.history(period="max")
+        if not hist.empty:
+            return int(hist.index[0].year)
+    except Exception:
+        pass
+    return None
+
+
+def enrich_missing_birth_years(stocks: list[dict], max_workers: int = 8) -> int:
+    """Fills BirthYear in place where missing. Returns how many stocks were filled."""
+    missing = [s for s in stocks if s.get("BirthYear") is None]
+    if not missing:
+        return 0
+    with ThreadPoolExecutor(max_workers=min(max_workers, len(missing))) as ex:
+        years = list(ex.map(lambda s: _fetch_birth_year(s["Ticker"]), missing))
+    filled = 0
+    for s, y in zip(missing, years):
+        if y:
+            s["BirthYear"] = y
+            filled += 1
+    return filled
+
+
+def data_quality(stocks: list[dict]) -> dict:
+    """Counts how many stocks have usable data, to explain a 0-result scan."""
+    n = len(stocks)
+    return {
+        "total": n,
+        "errors": sum(1 for s in stocks if s.get("Error")),
+        "no_volume": sum(1 for s in stocks if s.get("Volume") is None),
+        "no_mcap": sum(1 for s in stocks if s.get("MarketCap") is None),
+        "no_year": sum(1 for s in stocks if s.get("BirthYear") is None),
+    }
 
 
 def evaluate_condition(value: float, target: float, operator: str) -> bool:
