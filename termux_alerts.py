@@ -109,10 +109,10 @@ def vibrate_termux(duration_ms: int = 1000) -> bool:
         return False
 
 
-def send_termux_notification(title: str, content: str, vibrate_pattern: str = None) -> bool:
+def send_termux_notification(title: str, content: str, vibrate_pattern: str = None, sound: bool = False) -> bool:
     """
     Sends an Android system notification via Termux API (`termux-notification`).
-    Optionally accepts a vibration pattern (e.g. "1000,500,1000").
+    Optionally accepts a vibration pattern (e.g. "1000,500,1000") and sound flag.
     """
     cmd = shutil.which("termux-notification") or "termux-notification"
     notif_args = [
@@ -123,6 +123,8 @@ def send_termux_notification(title: str, content: str, vibrate_pattern: str = No
     ]
     if vibrate_pattern:
         notif_args.extend(["--vibrate", vibrate_pattern])
+    if sound:
+        notif_args.append("--sound")
     try:
         subprocess.run(notif_args, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
@@ -196,10 +198,11 @@ def load_rules(path: str = None) -> list:
     return rules
 
 
-def save_rules(rules: list, path: str = None) -> bool:
-    """Saves alert rules to JSON file atomically."""
-    _, mode = load_config(path)
-    return save_config(rules, mode, path)
+def save_rules(rules: list, path: str = None, alert_mode: str = None) -> bool:
+    """Saves alert rules to JSON file atomically, preserving or setting alert_mode."""
+    if alert_mode is None or alert_mode not in ALERT_MODES:
+        _, alert_mode = load_config(path)
+    return save_config(rules, alert_mode, path)
 
 
 def rule_key(rule: dict) -> str:
@@ -365,9 +368,9 @@ def play_termux_sound() -> dict:
 def trigger_alert_notification(mode: str, title: str, content: str) -> dict:
     """
     Triggers alert based on the configured mode:
-    - mode='sound': plays sound + sends system notification
-    - mode='vibration': vibrates device + sends system notification
-    - mode='both': plays sound + vibrates device + sends system notification
+    - mode='sound': plays sound + sends system notification (with sound flag)
+    - mode='vibration': vibrates device + sends system notification (with vibrate pattern)
+    - mode='both': plays sound + vibrates device + sends system notification (with sound and vibrate pattern)
     """
     results = {"sound": False, "vibration": False, "notification": False}
     mode = (mode or "both").lower()
@@ -382,7 +385,8 @@ def trigger_alert_notification(mode: str, title: str, content: str) -> dict:
         results["vibration"] = vibrate_termux(1000)
 
     vibrate_pattern = "1000,500,1000" if mode in ("vibration", "both") else None
-    results["notification"] = send_termux_notification(title, content, vibrate_pattern=vibrate_pattern)
+    sound_flag = mode in ("sound", "both")
+    results["notification"] = send_termux_notification(title, content, vibrate_pattern=vibrate_pattern, sound=sound_flag)
     return results
 
 
@@ -436,7 +440,7 @@ def prompt_select_alert_mode(current_mode: str) -> str:
         return current_mode
 
 
-def prompt_add_rule(rules: list) -> list:
+def prompt_add_rule(rules: list, alert_mode: str = None) -> list:
     """Prompt user to add a new alert rule."""
     print("\n--- ADD NEW ALERT RULE ---")
     try:
@@ -471,12 +475,12 @@ def prompt_add_rule(rules: list) -> list:
 
     new_rule = {"symbol": symbol, "condition": condition, "target": target, "active": True}
     rules.append(new_rule)
-    save_rules(rules)
+    save_rules(rules, alert_mode=alert_mode)
     print(f"Rule for {symbol} ({condition} {target:.2f}) added successfully!")
     return rules
 
 
-def prompt_toggle_rule(rules: list) -> list:
+def prompt_toggle_rule(rules: list, alert_mode: str = None) -> list:
     """Prompt user to toggle rule active state."""
     if not rules:
         print("\nNo rules to modify.")
@@ -487,7 +491,7 @@ def prompt_toggle_rule(rules: list) -> list:
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             rules[idx]["active"] = not rules[idx].get("active", True)
-            save_rules(rules)
+            save_rules(rules, alert_mode=alert_mode)
             status = "ACTIVE" if rules[idx]["active"] else "DISABLED"
             print(f"Rule for {rules[idx]['symbol']} set to: {status}")
         else:
@@ -499,7 +503,7 @@ def prompt_toggle_rule(rules: list) -> list:
     return rules
 
 
-def prompt_remove_rule(rules: list) -> list:
+def prompt_remove_rule(rules: list, alert_mode: str = None) -> list:
     """Prompt user to remove a rule."""
     if not rules:
         print("\nNo rules to remove.")
@@ -510,7 +514,7 @@ def prompt_remove_rule(rules: list) -> list:
         idx = int(idx_raw) - 1
         if 0 <= idx < len(rules):
             removed = rules.pop(idx)
-            save_rules(rules)
+            save_rules(rules, alert_mode=alert_mode)
             print(f"Rule for {removed['symbol']} removed successfully!")
         else:
             print("Invalid rule number.")
@@ -521,11 +525,12 @@ def prompt_remove_rule(rules: list) -> list:
     return rules
 
 
-def start_live_monitoring(rules: list, alert_mode: str = "both"):
+def start_live_monitoring(rules: list = None, alert_mode: str = None):
     """Runs continuous real-time market polling loop for active alert rules."""
+    _, initial_mode = load_config()
+    alert_mode = alert_mode or initial_mode
     print("\n" + "=" * 60)
     print(f"      STARTING REAL-TIME ALERT MONITORING (TERMUX)")
-    print(f"      Alert Mode: {alert_mode.upper()}")
     print("      Press Ctrl+C to stop and return to main menu")
     print("=" * 60 + "\n")
 
@@ -541,13 +546,13 @@ def start_live_monitoring(rules: list, alert_mode: str = "both"):
 
     try:
         while True:
-            current_rules = load_rules()
+            current_rules, current_mode = load_config()
             active_rules = [r for r in current_rules if r.get("active", True)]
             symbols = [r["symbol"] for r in active_rules]
 
             now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             poll_count += 1
-            print(f"[{now_str}] Poll #{poll_count} - Fetching prices for {len(symbols)} symbols...")
+            print(f"[{now_str}] Poll #{poll_count} (Mode: {current_mode.upper()}) - Fetching prices for {len(symbols)} symbols...")
 
             if symbols:
                 prices = fetch_last_prices(symbols)
@@ -566,7 +571,7 @@ def start_live_monitoring(rules: list, alert_mode: str = "both"):
                     print("\n" + "!" * 60)
                     print(f" *** TRIGGER FIRED: {msg} ***")
                     print("!" * 60 + "\n")
-                    trigger_alert_notification(alert_mode, f"Price Alert: {ev['symbol']}", msg)
+                    trigger_alert_notification(current_mode, f"Price Alert: {ev['symbol']}", msg)
             else:
                 print(" No active rules configured.")
 
@@ -587,14 +592,6 @@ def run_main_menu():
 
     rules, alert_mode = load_config()
 
-    print("\n" + "=" * 50)
-    print("     TERMUX PRICE ALERT MONITOR (TERMINAL MODE)")
-    print("=" * 50)
-
-    # Launch option prompt to select alert mode (sound / vibration / both)
-    alert_mode = prompt_select_alert_mode(alert_mode)
-    save_config(rules, alert_mode)
-
     while True:
         rules, alert_mode = load_config()
         print("\n" + "=" * 50)
@@ -605,7 +602,7 @@ def run_main_menu():
         print(" 3) Enable / Disable Rule")
         print(" 4) Remove Rule")
         print(" 5) Start Continuous Monitoring")
-        print(" 6) Test Alert Notification (Sound / Vibration)")
+        print(" 6) Test Alert Notification (Sound / Vibration / Both)")
         print(" 7) Change Alert Mode (Sound / Vibration / Both)")
         print(" 0) Exit")
         print("=" * 50)
@@ -621,11 +618,11 @@ def run_main_menu():
             prices = fetch_last_prices(active_symbols) if active_symbols else {}
             display_rules_and_prices(rules, prices)
         elif choice == "2":
-            prompt_add_rule(rules)
+            prompt_add_rule(rules, alert_mode)
         elif choice == "3":
-            prompt_toggle_rule(rules)
+            prompt_toggle_rule(rules, alert_mode)
         elif choice == "4":
-            prompt_remove_rule(rules)
+            prompt_remove_rule(rules, alert_mode)
         elif choice == "5":
             start_live_monitoring(rules, alert_mode)
         elif choice == "6":
