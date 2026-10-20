@@ -15,6 +15,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - FDASH_DATA_DIR=/data
+      - DASHBOARD_DB_PATH=/data/analysis_history.db
     restart: unless-stopped
 
   # Alerts worker: polls the finance service once per interval and sends Web Push notifications,
@@ -28,6 +29,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - FDASH_DATA_DIR=/data
+      - DASHBOARD_DB_PATH=/data/analysis_history.db
       - FDASH_ALERT_POLL_SECONDS=60
       # - FDASH_VAPID_CONTACT=mailto:you@example.com
     healthcheck:

@@ -321,6 +321,31 @@ def test_db_persistence(tmp_path):
     assert len(db.list_runs(db_file=test_db)) == 0
 
 
+def test_db_file_follows_data_dir(monkeypatch, tmp_path):
+    """The SQLite archive follows FDASH_DATA_DIR (DASHBOARD_DB_PATH wins) so Docker keeps it on /data."""
+    import importlib
+    nested = str(tmp_path / "data" / "nested")  # folder does not exist yet
+    try:
+        monkeypatch.setenv("FDASH_DATA_DIR", nested)
+        monkeypatch.delenv("DASHBOARD_DB_PATH", raising=False)
+        importlib.reload(db)
+        assert db.DB_FILE == os.path.join(nested, "analysis_history.db")
+
+        event_id = db.save_alert_event({"symbol": "AAPL", "condition": ">=", "target": 10.0, "price": 12.0})
+        assert event_id > 0
+        assert os.path.exists(db.DB_FILE)  # parent folder created automatically
+        assert len(db.list_alert_events()) == 1
+
+        monkeypatch.setenv("DASHBOARD_DB_PATH", "/data/analysis_history.db")
+        importlib.reload(db)
+        assert db.DB_FILE == "/data/analysis_history.db"
+    finally:
+        monkeypatch.delenv("FDASH_DATA_DIR", raising=False)
+        monkeypatch.delenv("DASHBOARD_DB_PATH", raising=False)
+        importlib.reload(db)
+
+
+
 # ------------------------------------------------------------------ Price alerts
 import alerts_engine as ae
 
