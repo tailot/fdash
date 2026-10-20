@@ -649,7 +649,7 @@ def test_termux_alerts_send_notification(monkeypatch):
     monkeypatch.setattr(ta.subprocess, "run", mock_run)
     monkeypatch.setattr(ta.shutil, "which", lambda cmd: f"/usr/bin/{cmd}" if cmd in ("termux-notification", "termux-vibrate") else None)
 
-    assert ta.send_termux_notification("Title Test", "Content Test", vibrate_pattern="1000,500,1000")
+    assert ta.send_termux_notification("Title Test", "Content Test", vibrate_pattern="1000,500,1000", sound=True)
     assert len(calls) == 1
     assert calls[0][0] == "/usr/bin/termux-notification"
     assert "--title" in calls[0]
@@ -660,6 +660,7 @@ def test_termux_alerts_send_notification(monkeypatch):
     assert "123" in calls[0]
     assert "--vibrate" in calls[0]
     assert "1000,500,1000" in calls[0]
+    assert "--sound" in calls[0]
 
     assert ta.vibrate_termux(1000)
     assert len(calls) == 2
@@ -667,24 +668,36 @@ def test_termux_alerts_send_notification(monkeypatch):
 
 
 def test_termux_alerts_trigger_alert_notification(monkeypatch):
+    notif_calls = []
+
+    def mock_send(title, content, vibrate_pattern=None, sound=False):
+        notif_calls.append({"title": title, "content": content, "vibrate_pattern": vibrate_pattern, "sound": sound})
+        return True
+
     monkeypatch.setattr(ta, "play_termux_sound", lambda: {"media": True, "bell": True})
     monkeypatch.setattr(ta, "vibrate_termux", lambda duration=1000: True)
-    monkeypatch.setattr(ta, "send_termux_notification", lambda title, content, vibrate_pattern=None: True)
+    monkeypatch.setattr(ta, "send_termux_notification", mock_send)
 
     res_sound = ta.trigger_alert_notification("sound", "Title", "Msg")
     assert res_sound["sound"] is True
     assert res_sound["vibration"] is False
     assert res_sound["notification"] is True
+    assert notif_calls[-1]["sound"] is True
+    assert notif_calls[-1]["vibrate_pattern"] is None
 
     res_vib = ta.trigger_alert_notification("vibration", "Title", "Msg")
     assert res_vib["sound"] is False
     assert res_vib["vibration"] is True
     assert res_vib["notification"] is True
+    assert notif_calls[-1]["sound"] is False
+    assert notif_calls[-1]["vibrate_pattern"] == "1000,500,1000"
 
     res_both = ta.trigger_alert_notification("both", "Title", "Msg")
     assert res_both["sound"] is True
     assert res_both["vibration"] is True
     assert res_both["notification"] is True
+    assert notif_calls[-1]["sound"] is True
+    assert notif_calls[-1]["vibrate_pattern"] == "1000,500,1000"
 
 
 def test_termux_alerts_prompt_select_alert_mode(monkeypatch):
@@ -748,3 +761,41 @@ def test_termux_alerts_keyboard_interrupt_and_eof(monkeypatch, capsys):
     out, _ = capsys.readouterr()
     assert "Operation cancelled." in out
     assert len(res_remove) == 1
+
+
+def test_termux_alerts_menu_options_and_live_monitoring(monkeypatch, tmp_path, capsys):
+    monkeypatch.setattr(ta, "enforce_termux_environment", lambda: None)
+    cfg_file = str(tmp_path / "alerts_config.json")
+    monkeypatch.setattr(ta, "CONFIG_PATH", cfg_file)
+
+    # Initial save: mode = sound
+    ta.save_config([{"symbol": "AAPL", "condition": ">=", "target": 150.0, "active": True}], "sound", cfg_file)
+
+    trigger_calls = []
+
+    def mock_trigger(mode, title, content):
+        trigger_calls.append({"mode": mode, "title": title, "content": content})
+        return {"sound": mode in ("sound", "both"), "vibration": mode in ("vibration", "both"), "notification": True}
+
+    monkeypatch.setattr(ta, "trigger_alert_notification", mock_trigger)
+
+    # Sequence of user choices in main menu:
+    # 6 -> Test alert (using current mode 'sound')
+    # 7 -> Change mode prompt -> option 2 ('vibration')
+    # 6 -> Test alert (using updated mode 'vibration')
+    # 0 -> Exit
+    inputs = iter(["6", "7", "2", "6", "0"])
+    monkeypatch.setattr("builtins.input", lambda prompt="": next(inputs))
+
+    ta.run_main_menu()
+    out, _ = capsys.readouterr()
+
+    assert "Executing alert test for mode [SOUND]" in out
+    assert "Executing alert test for mode [VIBRATION]" in out
+    assert len(trigger_calls) == 2
+    assert trigger_calls[0]["mode"] == "sound"
+    assert trigger_calls[1]["mode"] == "vibration"
+
+    # Verify config on disk updated to vibration
+    _, mode_on_disk = ta.load_config(cfg_file)
+    assert mode_on_disk == "vibration"
